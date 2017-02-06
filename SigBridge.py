@@ -1,19 +1,40 @@
 #!/usr/bin/python
 # -*- coding: iso-8859-1 -*-
-from Tkinter import Tk, Label, StringVar, Entry, Button, END
+from Tkinter import Tk, Label, StringVar, Entry, Button, END, Frame
 from smtpd import SMTPServer
 from ibWrapper import IBWrapper
+from logging.handlers import TimedRotatingFileHandler
+from ScrolledText import ScrolledText
 
 import json
 import asyncore
 import threading
+import os
+import logging
 
 
+# TODO:
+# fail catch on one of the IB clients
+# queue messages
 class SigServer(SMTPServer):
+    # --- creating log file handler --- #
+    if not os.path.isdir('logs'):
+        os.makedirs('logs')
+    logger = logging.getLogger("SigServer")
+    logger.setLevel(logging.INFO)
+
+    # create file, formatter and add it to the handlers
+    fh = TimedRotatingFileHandler('logs/SigServer.log', when='d',
+                                  interval=1, backupCount=10)
+    fh.setLevel(logging.INFO)
+    formatter = logging.Formatter('%(asctime)s - %(process)d - %(name)s '
+                                  '(%(levelname)s) : %(message)s')
+    fh.setFormatter(formatter)
+    logger.addHandler(fh)
+    # --- Done creating log file handler --- #
+
     orderTypeMap = {'market': 'mkt'}
-    ib = None
-    with open('conf/ibclients.json', 'r') as cf:
-        ib_conf = json.loads(cf.read())
+    ib_clients = dict()  # a dict to reference different client by account id
 
     def process_message(self, peer, mailfrom, rcpttos, data):
         # TODO: restrict sender ip via peer?
@@ -27,27 +48,37 @@ class SigServer(SMTPServer):
                 print ts_signal.action, ts_signal.quantity, ts_signal.symbol, '@',\
                     ts_signal.orderType, "\n\n"
 
-                # sending order to IB
-                res = self.ib.placeOrder(self.orderId,
-                    self.ib.create_contract(ts_signal.symbol, 'stk'),
-                    self.ib.create_order(self.orderTypeMap[ts_signal.orderType],
-                        ts_signal.quantity, ts_signal.action))
-                self.orderId += 1
+                for ib_cli in self.ib_clients.itervalues():
+                    # sending order to each IB client
+                    ib = ib_cli['ib']
+                    ib.placeOrder(ib_cli['nextOrderId'],
+                                  ib.create_contract(ts_signal.symbol, 'stk'),
+                                  ib.create_order(self.orderTypeMap[ts_signal.orderType],
+                                  ts_signal.quantity, ts_signal.action))
+                    ib_cli['nextOrderId'] += 1
 
     def run(self):
-        # TODO Add multiple IB connections
-        self.ib = IBWrapper(self.ib_conf[0]['server'],
-                                self.ib_conf[0]['port'],
-                                self.ib_conf[0]['client_id'])
-        self.orderId = int(self.ib.nextOrderId)
+        with open('conf/ibclients.json', 'r') as cf:
+            ib_conf = json.loads(cf.read())
+
+        # create multiple IB connections
+        for ib_host in ib_conf:
+            ib = IBWrapper(ib_host['server'], ib_host['port'], ib_host['client_id'])
+            if ib.account_id:
+                self.ib_clients[ib.account_id] = {
+                    'ib': ib,
+                    'nextOrderId': int(ib.nextOrderId)
+                }
         try:
+            # start smtp server with asyncore
             asyncore.loop()
         except KeyboardInterrupt:
             print "Keyboard Interrupt Intercepted."
 
     def shutdown(self):
-        if self.ib:
-            self.ib.disconnect()
+        for ib_cli in self.ib_clients.itervalues():
+            if ib_cli:
+                ib_cli['ib'].disconnect()
         self.close()
 
 
@@ -111,8 +142,8 @@ class TradeStationSignal:
 
 
 class SigBridgeUI(Tk):
-    def __init__(self,parent):
-        Tk.__init__(self,parent)
+    def __init__(self, parent):
+        Tk.__init__(self, parent)
         self.parent = parent
         self.initialize()
 
@@ -146,6 +177,22 @@ class SigBridgeUI(Tk):
         # self.entry.focus_set()
         # self.entry.selection_range(0, END)
 
+        """
+        # Logs Widget
+        self.log_widget = ScrolledText(self)
+        self.log_widget.grid(row=2, column=0, columnspan=3) #, sticky=Tk.NS)
+        self.log_widget.config(state='disabled')  # Not editable
+        large_text = '''\
+Man who drive like hell, bound to get there.
+Man who run in front of car, get tired.
+Man who run behind car, get exhausted.
+The Internet: where men are men, women are men, and children are FBI agents.
+'''
+        self.log_widget.insert(END, large_text)
+        self.log_widget.see(END)
+        # self.log_widget.update_idletasks()
+        """
+
     def set_geometry(self):
         # set position in window
         w = 200  # width for the Tk
@@ -171,8 +218,6 @@ class SigBridgeUI(Tk):
             self.server_thread.start()
             # TODO: Not sure how to send message to UI if IB thread fails to connect
             # Perhaps use a Queue as messaging pipe between the two?
-            if self.server.ib is None:
-                print "ib object is None"
             self.button.configure(text="Stop Server", command=self.stop_server)
             self.label_variable.set("Signal Server Started.")
         except Exception as err:

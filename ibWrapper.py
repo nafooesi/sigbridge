@@ -14,16 +14,17 @@ import re
 class IBWrapper:
     nextOrderId = 0
     connected = False
+    account_id = None
 
     # --- creating log file handler --- #
     if not os.path.isdir('logs'):
         os.makedirs('logs')
-    logger = logging.getLogger()
+    logger = logging.getLogger("IBWrapper")
     logger.setLevel(logging.INFO)
 
     # create file, formatter and add it to the handlers
-    fh = TimedRotatingFileHandler('logs/ibWrapper.log', when='d',
-                                  interval=1, backupCount=5)
+    fh = TimedRotatingFileHandler('logs/IBWrapper.log', when='d',
+                                  interval=1, backupCount=10)
     fh.setLevel(logging.INFO)
     formatter = logging.Formatter('%(asctime)s - %(process)d - %(name)s '
                                   '(%(levelname)s) : %(message)s')
@@ -31,15 +32,16 @@ class IBWrapper:
     logger.addHandler(fh)
     # --- Done creating log file handler --- #
 
-    def __init__(self, ip, port, clientId):
+    def __init__(self, ip, port, client_id):
 
         self.con_str = ''.join([ip, ":", str(port)])
-        self.con = ibConnection(ip, port, clientId)
+        self.con = ibConnection(ip, port, client_id)
 
         # Assign corresponding handling function to message types
         self.con.register(self.my_account_handler, 'UpdateAccountValue')
         self.con.register(self.error_handler, 'Error')
-        self.con.register(self.nextValidId_handler, 'NextValidId')
+        self.con.register(self.next_valid_id_handler, 'NextValidId')
+        self.con.register(self.managed_account_handler, 'ManagedAccounts')
         # self.con.register(self.my_tick_handler, message.tickSize, message.tickPrice)
 
         # Assign rest of server reply messages to the
@@ -48,7 +50,7 @@ class IBWrapper:
 
         connected = self.con.connect()
         if not connected:
-            raise Exception('Fail to connect to IB!')
+            raise ValueError('Fail to connect to IB!')
             
         self.logger.info('connected to IB on ' + self.con_str)
         # give it a second to get data
@@ -57,17 +59,26 @@ class IBWrapper:
     def my_account_handler(self, msg):
         self.logger.info(msg)
 
+    def managed_account_handler(self, msg):
+        """Handles the capturing of account id"""
+        regex = re.search(r'accountsList=(\w+)', str(msg))
+        if regex:
+            self.account_id = regex.group(1)
+            self.logger.info("IB account: %s" % self.account_id)
+        else:
+            raise ValueError("No account id found in msg: " + msg)
+
     def my_tick_handler(self, msg):
         self.logger.info(msg)
 
-    def nextValidId_handler(self, msg):
+    def next_valid_id_handler(self, msg):
         """Handles the capturing of next valid order id"""
         regex = re.search(r'orderId=(\d+)', str(msg))
         if regex:
             self.nextOrderId = regex.group(1)
-            self.logger.info("next valid id: %s" % (self.nextOrderId))
+            self.logger.info("next valid id: %s" % self.nextOrderId)
         else:
-            raise Exception("No next valid id found in msg: " + msg)
+            raise ValueError("No next valid id found in msg: " + msg)
 
     def error_handler(self, msg):
         """Handles the capturing of error messages"""
