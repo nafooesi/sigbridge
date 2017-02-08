@@ -1,156 +1,18 @@
 #!/usr/bin/python
 # -*- coding: iso-8859-1 -*-
-from Tkinter import Tk, Button, END, Frame
-from smtpd import SMTPServer
-from ibWrapper import IBWrapper
-from logging.handlers import TimedRotatingFileHandler
-from ScrolledText import ScrolledText
-
-import json
-import asyncore
 import threading
-import os
 import logging
 import Queue
+
+from Tkinter import Tk, Button, END, Frame
+from ScrolledText import ScrolledText
+
+from sigServer import SigServer
 
 
 # TODO:
 # fail catch on one of the IB clients
 # queue messages
-class SigServer(SMTPServer):
-
-    def __init__(self, laddr, raddr, uilogger):
-        SMTPServer.__init__(self, laddr, raddr)
-
-        self.uilogger = uilogger
-        # --- creating log file handler --- #
-        if not os.path.isdir('logs'):
-            os.makedirs('logs')
-        self.logger = logging.getLogger("SigServer")
-        self.logger.setLevel(logging.INFO)
-
-        # create file, formatter and add it to the handlers
-        fh = TimedRotatingFileHandler('logs/SigServer.log', when='d',
-                                      interval=1, backupCount=10)
-        fh.setLevel(logging.INFO)
-        formatter = logging.Formatter('%(asctime)s - %(process)d - %(name)s '
-                                      '(%(levelname)s) : %(message)s')
-        fh.setFormatter(formatter)
-        self.logger.addHandler(fh)
-        # --- Done creating log file handler --- #
-
-        self.orderTypeMap = {'market': 'mkt'}
-        self.ib_clients = dict()  # a dict to reference different client by account id
-
-    def process_message(self, peer, mailfrom, rcpttos, data):
-        # TODO: restrict sender ip via peer?
-        print "peer:", peer
-        # print "mailfrom:", mailfrom
-        # print "rcpttos:", rcpttos
-        if data:
-            ts_signal = TradeStationSignal(data)
-            print "TradeStation signal:"
-            if ts_signal.verify_attributes():
-                print ts_signal.action, ts_signal.quantity, ts_signal.symbol, '@',\
-                    ts_signal.orderType, "\n\n"
-
-                for ib_cli in self.ib_clients.itervalues():
-                    # sending order to each IB client
-                    ib = ib_cli['ib']
-                    ib.placeOrder(ib_cli['nextOrderId'],
-                                  ib.create_contract(ts_signal.symbol, 'stk'),
-                                  ib.create_order(self.orderTypeMap[ts_signal.orderType],
-                                  ts_signal.quantity, ts_signal.action))
-                    ib_cli['nextOrderId'] += 1
-
-    def run(self):
-        with open('conf/ibclients.json', 'r') as cf:
-            ib_conf = json.loads(cf.read())
-
-        # create multiple IB connections
-        for ib_host in ib_conf:
-            ib = IBWrapper(ib_host['server'], ib_host['port'], ib_host['client_id'])
-            if ib.account_id:
-                self.ib_clients[ib.account_id] = {
-                    'ib': ib,
-                    'nextOrderId': int(ib.nextOrderId)
-                }
-                self.uilogger.info('Connected to account: ' + ib.account_id)
-            else:
-                self.uilogger.error(' '.join(["Failed to connect to",
-                                             ib_host['server'], ':',
-                                             ib_host['port']]))
-        try:
-            # start smtp server with asyncore
-            asyncore.loop()
-        except KeyboardInterrupt:
-            print "Keyboard Interrupt Intercepted."
-
-    def shutdown(self):
-        for ib_cli in self.ib_clients.itervalues():
-            if ib_cli:
-                ib_cli['ib'].disconnect()
-        self.close()
-
-
-class TradeStationSignal:
-    subject_key = 'tradestation - new order has been placed for '
-    action = None
-    symbol = None
-    quantity = 0
-    orderType = None
-    accountName = None
-    orderId = None
-
-    def __init__(self, data):
-        """
-        Parses email data into wanted attributes
-        """
-        if data:
-            for line in data.split('\n'):
-                line = line.strip().lower()
-                if line.startswith('subject:'):
-                    # ensure this email is intended
-                    if self.subject_key not in line:
-                        print "Error: unrecognized subject:", line
-                        return
-                elif line.startswith('order:'):
-                    line = line.replace('buy to cover', 'buy')
-                    line = line.replace('sell short', 'sell')
-                    line = line.replace(',', '')
-                    params = line.split(' ')
-                    self.action = params[1]
-                    self.quantity = int(params[2])
-                    self.symbol = params[3]
-                    self.orderType = params[5]
-                elif line.startswith('account:'):
-                    params = line.split(' ')
-                    self.accountName = params[1]
-                elif line.startswith('order#:'):
-                    params = line.split(' ')
-                    self.orderId = params[1]
-
-    def verify_attributes(self):
-        if not self.symbol:
-            print "Error: no symbol found!"
-            return False
-        if not self.action or self.action not in ['sell', 'buy']:
-            print "Error: unexpected action: ", self.action
-            return False
-        if not self.orderType or self.orderType not in ['market']:
-            print "Error: unexpected order type: ", self.orderType
-            return False
-        if not self.quantity or self.quantity <= 0:
-            print "Error: unexpected quantity: ", self.quantity
-            return False
-        if not self.accountName:
-            print "Error: no accountName!"
-            return False
-        if not self.orderId:
-            print "Error: no order id!"
-            return False
-        return True
-
 
 class QueueLogger(logging.Handler):
     def __init__(self, queue):
@@ -223,7 +85,7 @@ class SigBridgeUI(Tk):
         self.log_widget.config(state='disabled')
 
     def start_log(self):
-        self.uilogger.info("Starting the logger")
+        self.uilogger.info("SigBridge Started.")
         self.update_widget()
         # self.control_log_button.configure(text="Pause Log", command=self.stop_log)
 

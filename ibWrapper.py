@@ -32,10 +32,11 @@ class IBWrapper:
     logger.addHandler(fh)
     # --- Done creating log file handler --- #
 
-    def __init__(self, ip, port, client_id):
+    def __init__(self, ip, port, client_id, uilogger=None):
 
         self.con_str = ''.join([ip, ":", str(port)])
         self.con = ibConnection(ip, port, client_id)
+        self.uilogger = uilogger
 
         # Assign corresponding handling function to message types
         self.con.register(self.my_account_handler, 'UpdateAccountValue')
@@ -49,12 +50,11 @@ class IBWrapper:
         # self.con.registerAll(self.reply_handler)
 
         connected = self.con.connect()
-        if not connected:
-            raise ValueError('Fail to connect to IB!')
-            
-        self.logger.info('connected to IB on ' + self.con_str)
-        # give it a second to get data
-        sleep(1)
+        if connected:
+            self.logger.info('connected to IB on ' + self.con_str)
+            # give it a second to get data
+            sleep(1)
+        # raise ValueError('Fail to connect to IB!')
 
     def my_account_handler(self, msg):
         self.logger.info(msg)
@@ -125,11 +125,17 @@ class IBWrapper:
         return self.con.placeOrder(order_id, contract, order)
 
     def disconnect(self):
-        self.logger.info('disconnecting IB from ' + self.con_str)
+        self.log_all('disconnecting IB from ' + self.con_str)
         self.con.disconnect()
 
     def reqQuote(self, contract):
         self.con.reqMktData(1, contract, '', False)
+
+    def log_all(self, message):
+        self.logger.info(message)
+        if self.uilogger:
+            self.uilogger.info(message)
+
 
 if __name__ == '__main__':
     # print 'acct update...'
