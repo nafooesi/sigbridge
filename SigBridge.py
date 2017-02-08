@@ -1,6 +1,6 @@
 #!/usr/bin/python
 # -*- coding: iso-8859-1 -*-
-from Tkinter import Tk, Label, StringVar, Entry, Button, END, Frame
+from Tkinter import Tk, Button, END, Frame
 from smtpd import SMTPServer
 from ibWrapper import IBWrapper
 from logging.handlers import TimedRotatingFileHandler
@@ -11,30 +11,36 @@ import asyncore
 import threading
 import os
 import logging
+import Queue
 
 
 # TODO:
 # fail catch on one of the IB clients
 # queue messages
 class SigServer(SMTPServer):
-    # --- creating log file handler --- #
-    if not os.path.isdir('logs'):
-        os.makedirs('logs')
-    logger = logging.getLogger("SigServer")
-    logger.setLevel(logging.INFO)
 
-    # create file, formatter and add it to the handlers
-    fh = TimedRotatingFileHandler('logs/SigServer.log', when='d',
-                                  interval=1, backupCount=10)
-    fh.setLevel(logging.INFO)
-    formatter = logging.Formatter('%(asctime)s - %(process)d - %(name)s '
-                                  '(%(levelname)s) : %(message)s')
-    fh.setFormatter(formatter)
-    logger.addHandler(fh)
-    # --- Done creating log file handler --- #
+    def __init__(self, laddr, raddr, uilogger):
+        SMTPServer.__init__(self, laddr, raddr)
 
-    orderTypeMap = {'market': 'mkt'}
-    ib_clients = dict()  # a dict to reference different client by account id
+        self.uilogger = uilogger
+        # --- creating log file handler --- #
+        if not os.path.isdir('logs'):
+            os.makedirs('logs')
+        self.logger = logging.getLogger("SigServer")
+        self.logger.setLevel(logging.INFO)
+
+        # create file, formatter and add it to the handlers
+        fh = TimedRotatingFileHandler('logs/SigServer.log', when='d',
+                                      interval=1, backupCount=10)
+        fh.setLevel(logging.INFO)
+        formatter = logging.Formatter('%(asctime)s - %(process)d - %(name)s '
+                                      '(%(levelname)s) : %(message)s')
+        fh.setFormatter(formatter)
+        self.logger.addHandler(fh)
+        # --- Done creating log file handler --- #
+
+        self.orderTypeMap = {'market': 'mkt'}
+        self.ib_clients = dict()  # a dict to reference different client by account id
 
     def process_message(self, peer, mailfrom, rcpttos, data):
         # TODO: restrict sender ip via peer?
@@ -69,6 +75,11 @@ class SigServer(SMTPServer):
                     'ib': ib,
                     'nextOrderId': int(ib.nextOrderId)
                 }
+                self.uilogger.info('Connected to account: ' + ib.account_id)
+            else:
+                self.uilogger.error(' '.join(["Failed to connect to",
+                                             ib_host['server'], ':',
+                                             ib_host['port']]))
         try:
             # start smtp server with asyncore
             asyncore.loop()
@@ -141,62 +152,96 @@ class TradeStationSignal:
         return True
 
 
+class QueueLogger(logging.Handler):
+    def __init__(self, queue):
+        logging.Handler.__init__(self)
+        self.queue = queue
+
+    # write in the queue
+    def emit(self, record):
+        self.queue.put(self.format(record).rstrip('\n') + '\n')
+
+
+# noinspection SpellCheckingInspection
 class SigBridgeUI(Tk):
-    def __init__(self, parent):
-        Tk.__init__(self, parent)
-        self.parent = parent
-        self.initialize()
+    server = None
+    server_thread = None
 
-    def initialize(self):
-        self.grid()
+    def __init__(self):
+        Tk.__init__(self)
 
-        # from_label = Label(self, text="From:").grid(column=0, row=0)
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(0, weight=1)
 
-        # text box input for smtp ip
-        # self.entry_variable = StringVar()
-        # self.entry = Entry(self, textvariable=self.entry_variable)
-        # self.entry.grid(column=0, row=0, sticky='W')
-        # self.entry.bind("<Return>", self.on_press_enter)
-        # self.entry_variable.set("localhost")
+        # 2 rows: firts with settings, second with registrar data
+        self.main_frame = Frame(self)
+        # Commands row doesn't expands
+        self.main_frame.rowconfigure(0, weight=0)
+        # Logs row will grow
+        self.main_frame.rowconfigure(1, weight=1)
+        # Main frame can enlarge
+        self.main_frame.columnconfigure(0, weight=1)
+        self.main_frame.columnconfigure(1, weight=1)
+        self.main_frame.grid(row=0, column=0)
 
-        # button
-        self.button = Button(self, text="Start Server", command=self.start_server)
-        self.button.grid(column=0, row=0)
-        
-        # label output
-        self.label_variable = StringVar()
-        label = Label(self, textvariable=self.label_variable, anchor="w", fg="black")
-        label.grid(column=0, row=1, columnspan=3, sticky='EW')
-        self.label_variable.set("")
+        # Run/Stop button
+        self.server_button = Button(self.main_frame, text="Start Server", command=self.start_server)
+        self.server_button.grid(row=0, column=0)
 
-        # general config
-        self.grid_columnconfigure(0, weight=1)
-        self.resizable(True, False)
-        self.update()
-        self.set_geometry()
-        # self.entry.focus_set()
-        # self.entry.selection_range(0, END)
+        # Clear button
+        self.clear_button = Button(self.main_frame, text="Clear Log", command=self.clear_log)
+        self.clear_button.grid(row=0, column=1)
 
-        """
         # Logs Widget
-        self.log_widget = ScrolledText(self)
-        self.log_widget.grid(row=2, column=0, columnspan=3) #, sticky=Tk.NS)
-        self.log_widget.config(state='disabled')  # Not editable
-        large_text = '''\
-Man who drive like hell, bound to get there.
-Man who run in front of car, get tired.
-Man who run behind car, get exhausted.
-The Internet: where men are men, women are men, and children are FBI agents.
-'''
-        self.log_widget.insert(END, large_text)
-        self.log_widget.see(END)
+        self.log_widget = ScrolledText(self.main_frame)
+        self.log_widget.grid(row=1, column=0, columnspan=2)
+        # made not editable
+        self.log_widget.config(state='disabled')
+
+        # Queue where the logging handler will write
+        self.log_queue = Queue.Queue()
+
+        # Setup the logger
+        self.uilogger = logging.getLogger('SigBridgeUI')
+        self.uilogger.setLevel(logging.INFO)
+        formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+
+        # Use the QueueLogger as Handler
+        hl = QueueLogger(queue=self.log_queue)
+        hl.setFormatter(formatter)
+        self.uilogger.addHandler(hl)
+
         # self.log_widget.update_idletasks()
-        """
+        self.set_geometry()
+
+        # Setup the update_widget callback reading logs from the queue
+        self.start_log()
+
+    def clear_log(self):
+        self.log_widget.config(state='normal')
+        self.log_widget.delete(0.0, END)
+        self.log_widget.config(state='disabled')
+
+    def start_log(self):
+        self.uilogger.info("Starting the logger")
+        self.update_widget()
+        # self.control_log_button.configure(text="Pause Log", command=self.stop_log)
+
+    def update_widget(self):
+        self.log_widget.config(state='normal')
+        # Read from the Queue and add to the log widger
+        while not self.log_queue.empty():
+            line = self.log_queue.get()
+            self.log_widget.insert(END, line)
+            self.log_widget.see(END)  # Scroll to the bottom
+            self.log_widget.update_idletasks()
+        self.log_widget.config(state='disabled')
+        self.log_widget.after(10, self.update_widget)
 
     def set_geometry(self):
         # set position in window
-        w = 200  # width for the Tk
-        h = 100  # height for the Tk
+        w = 600  # width for the Tk
+        h = 300  # height for the Tk
 
         # get screen width and height
         ws = self.winfo_screenwidth()   # width of the screen
@@ -212,17 +257,17 @@ The Internet: where men are men, women are men, and children are FBI agents.
 
     def start_server(self):
         try:
-            self.server = SigServer(('0.0.0.0', 25), None)
+            self.server = SigServer(('0.0.0.0', 25), None, self.uilogger)
             self.server_thread = threading.Thread(name='server', target=self.server.run)
             self.server_thread.daemon = True
             self.server_thread.start()
             # TODO: Not sure how to send message to UI if IB thread fails to connect
             # Perhaps use a Queue as messaging pipe between the two?
-            self.button.configure(text="Stop Server", command=self.stop_server)
-            self.label_variable.set("Signal Server Started.")
+            self.server_button.configure(text="Stop Server", command=self.stop_server)
+            # self.label_variable.set("Signal Server Started.")
         except Exception as err:
             print "Cannot start the server: %s" % err.message
-            self.label_variable.set("ERROR: %s" % err.message)
+            # self.label_variable.set("ERROR: %s" % err.message)
 
         # self.label_variable.set(self.entry_variable.get()+"(Started Signal Server)")
         # self.entry.focus_set()
@@ -230,16 +275,11 @@ The Internet: where men are men, women are men, and children are FBI agents.
 
     def stop_server(self):
         self.server.shutdown()
-        self.button.configure(text="Start Server", command=self.start_server)
-        self.label_variable.set("Signal Server Stopped.")
-
-    # def on_press_enter(self, event):
-        # self.label_variable.set(self.entry_variable.get()+" (You pressed ENTER)")
-        # self.entry.focus_set()
-        # self.entry.selection_range(0, END)
+        self.server_button.configure(text="Start Server", command=self.start_server)
+        # self.label_variable.set("Signal Server Stopped.")
 
 
 if __name__ == '__main__':
-    app = SigBridgeUI(None)
+    app = SigBridgeUI()
     app.title('SigBridge')
     app.mainloop()
