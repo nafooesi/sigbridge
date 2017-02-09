@@ -10,10 +10,6 @@ from ScrolledText import ScrolledText
 from sigServer import SigServer
 
 
-# TODO:
-# fail catch on one of the IB clients
-# queue messages
-
 class QueueLogger(logging.Handler):
     def __init__(self, queue):
         logging.Handler.__init__(self)

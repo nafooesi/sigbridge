@@ -11,6 +11,9 @@ from tradeStationSignal import TradeStationSignal
 
 
 class SigServer(SMTPServer):
+    order_type_map = {'market': 'mkt'}
+    ib_clients = dict()  # a dict to reference different client by account id
+
     def __init__(self, laddr, raddr, uilogger):
         SMTPServer.__init__(self, laddr, raddr)
 
@@ -31,9 +34,6 @@ class SigServer(SMTPServer):
         self.logger.addHandler(fh)
         # --- Done creating log file handler --- #
 
-        self.order_type_map = {'market': 'mkt'}
-        self.ib_clients = dict()  # a dict to reference different client by account id
-
     def process_message(self, peer, mailfrom, rcpttos, data):
         # TODO: restrict sender ip via peer?
         self.logger.info(' '.join(["Receiving signal from:", str(peer), ' with\n', data]))
@@ -47,12 +47,14 @@ class SigServer(SMTPServer):
 
                 for ib_cli in self.ib_clients.itervalues():
                     # sending order to each IB client
-                    ib = ib_cli['ib']
-                    ib.placeOrder(ib_cli['nextOrderId'],
-                                  ib.create_contract(ts_signal.symbol, 'stk'),
-                                  ib.create_order(self.order_type_map[ts_signal.order_type],
-                                                  ts_signal.quantity, ts_signal.action))
-                    ib_cli['nextOrderId'] += 1
+                    quantity = int(round(ts_signal.quantity * ib_cli.sig_multiplier))
+                    ib_cli.placeOrder(ib_cli.nextOrderId, ib_cli.create_contract(ts_signal.symbol, 'stk'),
+                                      ib_cli.create_order(self.order_type_map[ts_signal.order_type],
+                                                          quantity, ts_signal.action))
+
+                    self.log_all(' '.join(["sent", ib_cli.account_id, ts_signal.action, str(quantity), ts_signal.symbol,
+                                           '@', ts_signal.order_type]))
+                    ib_cli.nextOrderId += 1
 
     def run(self):
         with open('conf/ibclients.json', 'r') as cf:
@@ -60,12 +62,10 @@ class SigServer(SMTPServer):
 
         # create multiple IB connections
         for ib_host in ib_conf:
-            ib = IBWrapper(ib_host['server'], ib_host['port'], ib_host['client_id'], self.uilogger)
+            ib = IBWrapper(ib_host['server'], ib_host['port'], ib_host['client_id'],
+                           ib_host['sig_multiplier'], self.uilogger)
             if ib.account_id:
-                self.ib_clients[ib.account_id] = {
-                    'ib': ib,
-                    'nextOrderId': int(ib.nextOrderId)
-                }
+                self.ib_clients[ib.account_id] = ib
                 self.uilogger.info('Connected to account: ' + ib.account_id)
             else:
                 self.uilogger.error(' '.join(["Failed to connect to", ib_host['server'], ':', str(ib_host['port'])]))
@@ -76,7 +76,7 @@ class SigServer(SMTPServer):
     def shutdown(self):
         for ib_cli in self.ib_clients.itervalues():
             if ib_cli:
-                ib_cli['ib'].disconnect()
+                ib_cli.disconnect()
         self.close()
 
     def log_all(self, message):

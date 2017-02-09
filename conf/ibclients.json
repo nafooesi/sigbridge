@@ -2,6 +2,7 @@
   {
     "server": "localhost",
     "port": 7496,
-    "client_id": 1
+    "client_id": 1,
+    "sig_multiplier": 2.5
   }
 ]

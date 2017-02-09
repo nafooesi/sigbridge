@@ -32,10 +32,11 @@ class IBWrapper:
     logger.addHandler(fh)
     # --- Done creating log file handler --- #
 
-    def __init__(self, ip, port, client_id, uilogger=None):
+    def __init__(self, ip, port, client_id, sig_multiplier=1, uilogger=None):
 
         self.con_str = ''.join([ip, ":", str(port)])
         self.con = ibConnection(ip, port, client_id)
+        self.sig_multiplier = sig_multiplier
         self.uilogger = uilogger
 
         # Assign corresponding handling function to message types
@@ -75,8 +76,8 @@ class IBWrapper:
         """Handles the capturing of next valid order id"""
         regex = re.search(r'orderId=(\d+)', str(msg))
         if regex:
-            self.nextOrderId = regex.group(1)
-            self.logger.info("next valid id: %s" % self.nextOrderId)
+            self.nextOrderId = int(regex.group(1))
+            self.logger.info("next valid id: %d" % self.nextOrderId)
         else:
             raise ValueError("No next valid id found in msg: " + msg)
 
