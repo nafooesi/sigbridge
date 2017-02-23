@@ -1,4 +1,6 @@
-#!/usr/bin/python
+################################################################################
+# This is the main program that runs the UI and instantiates other modules.
+################################################################################
 # -*- coding: iso-8859-1 -*-
 import threading
 import logging
@@ -90,9 +92,11 @@ class SigBridgeUI(Tk):
         # Read from the Queue and add to the log widger
         while not self.log_queue.empty():
             line = self.log_queue.get()
-            self.log_widget.insert(END, line)
+            tag = "error" if " ERROR " in line else 'info'
+            self.log_widget.insert(END, line, tag)
             self.log_widget.see(END)  # Scroll to the bottom
             self.log_widget.update_idletasks()
+        self.log_widget.tag_config('error', foreground="red")
         self.log_widget.config(state='disabled')
         self.log_widget.after(10, self.update_widget)
 
@@ -119,13 +123,9 @@ class SigBridgeUI(Tk):
             self.server_thread = threading.Thread(name='server', target=self.server.run)
             self.server_thread.daemon = True
             self.server_thread.start()
-            # TODO: Not sure how to send message to UI if IB thread fails to connect
-            # Perhaps use a Queue as messaging pipe between the two?
             self.server_button.configure(text="Stop Server", command=self.stop_server)
-            # self.label_variable.set("Signal Server Started.")
         except Exception as err:
             print "Cannot start the server: %s" % err.message
-            # self.label_variable.set("ERROR: %s" % err.message)
 
         # self.label_variable.set(self.entry_variable.get()+"(Started Signal Server)")
         # self.entry.focus_set()
@@ -134,6 +134,7 @@ class SigBridgeUI(Tk):
     def stop_server(self):
         self.server.shutdown()
         self.server_button.configure(text="Start Server", command=self.start_server)
+        self.server = None
         # self.label_variable.set("Signal Server Stopped.")
 
 

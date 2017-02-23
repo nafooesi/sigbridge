@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 from time import sleep
 from ib.ext.Contract import Contract
@@ -83,7 +82,15 @@ class IBWrapper:
 
     def error_handler(self, msg):
         """Handles the capturing of error messages"""
-        self.logger.error("Server Error: %s" % msg)
+        regex = re.search(r'<.*errorCode=(.*),\serrorMsg=(.*)>', str(msg))
+        if regex:
+            err_code = regex.group(1)
+            err_msg = regex.group(2)
+            self.logger.error("IB Error [code: %s, message: %s]" % (err_code, err_msg))
+            if err_code == 'None' and err_msg.startswith('unpack requires a string'):
+                self.log_all("IB account " + self.account_id + " was shutdown!", 'error')
+        else:
+            self.logger.error("IB Error: %s" % msg)
 
     def reply_handler(self, msg):
         """Handles of server replies"""
@@ -126,16 +133,21 @@ class IBWrapper:
         return self.con.placeOrder(order_id, contract, order)
 
     def disconnect(self):
-        self.log_all('disconnecting IB from ' + self.con_str)
+        self.log_all('Disconnecting IB account %s @ %s' % (self.account_id, self.con_str))
         self.con.disconnect()
 
     def reqQuote(self, contract):
         self.con.reqMktData(1, contract, '', False)
 
-    def log_all(self, message):
-        self.logger.info(message)
-        if self.uilogger:
-            self.uilogger.info(message)
+    def log_all(self, message, level='info'):
+        if level == 'info':
+            self.logger.info(message)
+            if self.uilogger:
+                self.uilogger.info(message)
+        else:
+            self.logger.error(message)
+            if self.uilogger:
+                self.uilogger.error(message)
 
 
 if __name__ == '__main__':

@@ -1,3 +1,8 @@
+################################################################################
+# This is class that translates TradeStation Email into actionable signals.
+################################################################################
+
+
 class TradeStationSignal:
     action = None
     sig_type = None

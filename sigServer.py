@@ -13,26 +13,26 @@ from tradeStationSignal import TradeStationSignal
 class SigServer(SMTPServer):
     order_type_map = {'market': 'mkt'}
     ib_clients = dict()  # a dict to reference different client by account id
+    # --- creating log file handler --- #
+    if not os.path.isdir('logs'):
+        os.makedirs('logs')
+    logger = logging.getLogger("SigServer")
+    logger.setLevel(logging.INFO)
+
+    # create file, formatter and add it to the handlers
+    fh = TimedRotatingFileHandler('logs/SigServer.log', when='d',
+                                  interval=1, backupCount=10)
+    fh.setLevel(logging.INFO)
+    formatter = logging.Formatter('%(asctime)s - %(process)d - %(name)s '
+                                  '(%(levelname)s) : %(message)s')
+    fh.setFormatter(formatter)
+    logger.addHandler(fh)
+    # --- Done creating log file handler --- #
 
     def __init__(self, laddr, raddr, uilogger):
         SMTPServer.__init__(self, laddr, raddr)
 
         self.uilogger = uilogger
-        # --- creating log file handler --- #
-        if not os.path.isdir('logs'):
-            os.makedirs('logs')
-        self.logger = logging.getLogger("SigServer")
-        self.logger.setLevel(logging.INFO)
-
-        # create file, formatter and add it to the handlers
-        fh = TimedRotatingFileHandler('logs/SigServer.log', when='d',
-                                      interval=1, backupCount=10)
-        fh.setLevel(logging.INFO)
-        formatter = logging.Formatter('%(asctime)s - %(process)d - %(name)s '
-                                      '(%(levelname)s) : %(message)s')
-        fh.setFormatter(formatter)
-        self.logger.addHandler(fh)
-        # --- Done creating log file handler --- #
 
     def process_message(self, peer, mailfrom, rcpttos, data):
         # TODO: restrict sender ip via peer?
@@ -66,7 +66,7 @@ class SigServer(SMTPServer):
                            ib_host['sig_multiplier'], self.uilogger)
             if ib.account_id:
                 self.ib_clients[ib.account_id] = ib
-                self.uilogger.info('Connected to account: ' + ib.account_id)
+                self.uilogger.info('Connected to IB account: ' + ib.account_id)
             else:
                 self.uilogger.error(' '.join(["Failed to connect to", ib_host['server'], ':', str(ib_host['port'])]))
 
