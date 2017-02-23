@@ -1,9 +1,9 @@
 ## What is this?
-This is a python application with minimal UI that replicates trade signals from TradeStation to one or more Interactivebroker clients.
+This is a python (v2.7) application with minimal UI that replicates trade signals from TradeStation to one or more Interactivebroker clients.
 
 ## Dependencies:
--ibpy2
--pyinstaller
+- ibpy2
+- pyinstaller
 
 ## Configuration:
 IB clients are configured in a json file under "conf" dir. 
@@ -13,8 +13,8 @@ The attributes in the config file should be self explainatory.
 Run:  
 python SigBridge.py
 
-Tests:  (sending simulated trade signal as if it's from TradeStation)  
-python tests/SendSig.py 
+Tests:  
+- Sending simulated trade signal as if it's from TradeStation: python tests/SendSig.py 
 
 ## Build & Distribute
 To create distributable app, run:  
