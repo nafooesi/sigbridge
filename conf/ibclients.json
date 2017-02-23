@@ -3,12 +3,14 @@
     "server": "localhost",
     "port": 7496,
     "client_id": 1,
-    "sig_multiplier": 1.5
+    "sig_multiplier": 1.5,
+    "active": false
   },
   {
     "server": "localhost",
     "port": 7497,
     "client_id": 1,
-    "sig_multiplier": 1
+    "sig_multiplier": 1,
+    "active": true
   }
 ]

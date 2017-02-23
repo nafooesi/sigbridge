@@ -62,6 +62,11 @@ class SigServer(SMTPServer):
 
         # create multiple IB connections
         for ib_host in ib_conf:
+            if 'active' in ib_host:
+                if not ib_host['active']:
+                    # skip inactive client
+                    continue
+
             ib = IBWrapper(ib_host['server'], ib_host['port'], ib_host['client_id'],
                            ib_host['sig_multiplier'], self.uilogger)
             if ib.account_id:
