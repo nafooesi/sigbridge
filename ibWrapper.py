@@ -12,7 +12,6 @@ import re
 
 class IBWrapper:
     nextOrderId = 0
-    connected = False
     account_id = None
 
     # --- creating log file handler --- #
@@ -49,8 +48,8 @@ class IBWrapper:
         # reply_handler function
         # self.con.registerAll(self.reply_handler)
 
-        connected = self.con.connect()
-        if connected:
+    def connect(self):
+        if self.con.connect():
             self.logger.info('connected to IB on ' + self.con_str)
             # give it a second to get data
             sleep(1)
@@ -156,6 +155,7 @@ if __name__ == '__main__':
     # sleep(1)
 
     ib = IBWrapper('192.168.1.109', 7496, 1)
+    ib.connect()
 
     # Create an order ID which is 'global' for this session. This
     # will need incrementing once new orders are submitted.
