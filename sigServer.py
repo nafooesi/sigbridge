@@ -8,6 +8,7 @@ from smtpd import SMTPServer
 from ibWrapper import IBWrapper
 from logging.handlers import TimedRotatingFileHandler
 from time import sleep
+from slack import Slack
 
 from tradeStationSignal import TradeStationSignal
 
@@ -47,6 +48,8 @@ class SigServer(SMTPServer):
         """
         # TODO: restrict sender ip via peer?
         self.logger.info(' '.join(["Receiving signal from:", str(peer), ' with\n', data]))
+        # send data to slack channel
+        Slack().send(data)
         # print "mailfrom:", mailfrom
         # print "rcpttos:", rcpttos
         if data:

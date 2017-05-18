@@ -25,7 +25,7 @@ if __name__ == '__main__':
         sys.exit()
 
     fromaddr = 'test@sender.com'
-    for i in xrange(1):
+    for i in xrange(3):
         i += 1
         toaddr = 'test ' + str(i) + '@receiver.com'
         # 4 types of order message?
@@ -57,5 +57,7 @@ if __name__ == '__main__':
         except:
             print "toaddr", toaddr, " has unexpected error:", sys.exc_info()[0]
             print sys.exc_info()[1]
+
+        time.sleep(2)
 
     server.quit()

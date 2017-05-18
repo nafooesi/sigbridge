@@ -8,6 +8,7 @@ from logging.handlers import TimedRotatingFileHandler
 import logging
 import os
 import re
+import json
 
 
 class IBWrapper:
@@ -47,6 +48,10 @@ class IBWrapper:
         # Assign rest of server reply messages to the
         # reply_handler function
         # self.con.registerAll(self.reply_handler)
+
+        # reading ib's symbol mapping
+        with open('conf/ibsymbols.json', 'r') as cf:
+            self.symbol_map = json.loads(cf.read())
 
     def connect(self):
         if self.con.connect():
@@ -106,6 +111,16 @@ class IBWrapper:
         prim_exch - The primary exchange to carry out the contract on
         curr - The currency in which to purchase the contract
         """
+        sec_type = sec_type.lower()
+        symbol = symbol.lower()
+
+        # check the symbol map to see if any attributes were defined for this symbol's order
+        # e.g. "GLD" has primary exchange defined to disambiguate from "GLD" of foreign exchanges.
+        if sec_type in self.symbol_map:
+            if symbol in self.symbol_map[sec_type]:
+                if 'prim_exch' in self.symbol_map[sec_type][symbol]:
+                    prim_exch = str(self.symbol_map[sec_type][symbol]['prim_exch'])
+
         contract = Contract()
         contract.m_symbol = symbol
         contract.m_secType = sec_type
@@ -154,7 +169,7 @@ if __name__ == '__main__':
     # con.reqAccountUpdates(1, '')
     # sleep(1)
 
-    ib = IBWrapper('192.168.1.109', 7496, 1)
+    ib = IBWrapper('localhost', 7496, 1)
     ib.connect()
 
     # Create an order ID which is 'global' for this session. This
@@ -164,7 +179,7 @@ if __name__ == '__main__':
     print ">>> order id is", order_id
 
     # Create a contract 
-    contract = ib.create_contract('vxx', 'stk')
+    contract = ib.create_contract('gld', 'stk')
 
     # create order
     order = ib.create_order('mkt', 200, 'sell')

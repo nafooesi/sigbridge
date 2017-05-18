@@ -9,7 +9,7 @@
   {
     "server": "localhost",
     "port": 7497,
-    "client_id": 1,
+    "client_id": 2,
     "sig_multiplier": 1,
     "active": true
   }
