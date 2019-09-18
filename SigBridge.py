@@ -45,7 +45,7 @@ class SigBridgeUI(Tk):
         self.main_frame.grid(row=0, column=0)
 
         # Run/Stop button
-        self.server_button = Button(self.main_frame, text="Start Server", command=self.start_server)
+        self.server_button = Button(self.main_frame, text="Connect", command=self.start_server)
         self.server_button.grid(row=0, column=0)
 
         # Clear button
@@ -123,7 +123,7 @@ class SigBridgeUI(Tk):
             self.server_thread = threading.Thread(name='server', target=self.server.run)
             self.server_thread.daemon = True
             self.server_thread.start()
-            self.server_button.configure(text="Stop Server", command=self.stop_server)
+            self.server_button.configure(text="Disconnect", command=self.stop_server)
         except Exception as err:
             print "Cannot start the server: %s" % err.message
 
@@ -133,7 +133,7 @@ class SigBridgeUI(Tk):
 
     def stop_server(self):
         self.server.shutdown()
-        self.server_button.configure(text="Start Server", command=self.start_server)
+        self.server_button.configure(text="Connect", command=self.start_server)
         self.server = None
         # self.label_variable.set("Signal Server Stopped.")
 

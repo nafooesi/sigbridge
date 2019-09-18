@@ -1,6 +1,26 @@
 ################################################################################
 # This is class that translates TradeStation Email into actionable signals.
+# sample TS email content:
+"""
+Date: 17 Sep 2019 19:50:20 UTC
+From:  <xxxxx@roadrunner.com>
+X-Priority: 3 (Normal)
+To: <xxxxx@roadrunnerl.com>
+Subject: TradeStation - Order has been filled for TQQQ
+MIME-Version: 1.0
+Content-type: text/plain; charset="US-ASCII"
+Content-Transfer-Encoding: 7bit
+TradeStation - Order has been filled for TQQQ
+    Order: Buy 300 TQQQ @ Market
+    Qty Filled: 300
+    Filled Price: 65.2000
+    Duration: Day
+    Route: Intelligent
+    Account: SIMXXXX
+    Order#: 5-5733-7770
+"""
 ################################################################################
+
 
 
 class TradeStationSignal:
@@ -11,6 +31,7 @@ class TradeStationSignal:
     order_type = None
     account_name = None
     order_id = None
+    price = 0
 
     def __init__(self, data):
         """
@@ -48,6 +69,9 @@ class TradeStationSignal:
                     line = line.replace(',', '')
                     params = line.split(' ')
                     self.quantity = int(params[2])
+                elif line.startswith('filled price:'):
+                    params = line.split(' ')
+                    self.price = float(params[2])
                 elif line.startswith('account:'):
                     params = line.split(' ')
                     self.account_name = params[1]

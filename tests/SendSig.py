@@ -8,12 +8,13 @@ import socket
 
 if __name__ == '__main__':
     server = 'localhost'
+    port = 25
 
-    if len(sys.argv) > 2:
-        server = sys.argv[1]
-
+    if len(sys.argv) >= 2:
+        [server, port] = sys.argv[1].split(":")
+        
     try:
-        server = SMTP(server, 25, timeout=3)
+        server = SMTP(server, port, timeout=6)
     except socket.timeout:
         print "Error: server connection timed out."
         sys.exit()
@@ -24,12 +25,13 @@ if __name__ == '__main__':
         print "Error: Connection refused for", server
         sys.exit()
 
-    fromaddr = 'test@sender.com'
-    for i in xrange(3):
+    fromaddr = 'from@tester.net'
+    for i in xrange(1):
         i += 1
-        toaddr = 'test ' + str(i) + '@receiver.com'
+        toaddr = 'test@receiver.com'
         # 4 types of order message?
         # body = ('TradeStation - New order has been placed for VXX\n'
+        """
         body = ('TradeStation - Order has been filled for VXX\n'
                 #'        Order: Sell 225 VXX @ Market\n'
                 #'        Order: Buy 225 VXX @ Market\n'
@@ -42,13 +44,21 @@ if __name__ == '__main__':
                 '        Route: Intelligent\n'
                 '        Account: SIM524807M\n'
                 '        Order#: 4-4060-7888')
-
+        """
+        body = ('TradeStation - Order has been filled for TQQQ\n'
+                 '   Order: Buy 300 TQQQ @ Market\n'
+                 '   Qty Filled: 300\n'
+                 '   Filled Price: 65.2000\n'
+                 '   Duration: Day\n'
+                 '   Route: Intelligent\n'
+                 '   Account: SIMXXXX\n'
+                 '   Order#: 5-5733-7770')
 
         msg = MIMEText(body)
         # msg['Subject'] = 'TradeStation - New order has been placed for VXX'
         msg['Subject'] = 'TradeStation - Order has been filled for VXX'
         msg['From'] = 'samhalim@roadrunner.com'
-        msg['To'] = 'test@receiver.com'
+        msg['To'] = ','.join([toaddr])
 
         try:
             server.sendmail(fromaddr, [toaddr], msg.as_string())

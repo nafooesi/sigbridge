@@ -5,17 +5,18 @@ import logging
 import threading
 
 from smtpd import SMTPServer
-from ibWrapper import IBWrapper
 from logging.handlers import TimedRotatingFileHandler
 from time import sleep
-from slack import Slack
 
+from ibWrapper import IBWrapper
+from slack import Slack
+from emailSender import EmailSender
 from tradeStationSignal import TradeStationSignal
 
 
 class SigServer(SMTPServer):
     order_type_map = {'market': 'mkt'}
-    ib_clients = dict()  # a dict to reference different client by account id
+
     # --- creating log file handler --- #
     if not os.path.isdir('logs'):
         os.makedirs('logs')
@@ -36,6 +37,31 @@ class SigServer(SMTPServer):
         SMTPServer.__init__(self, laddr, raddr)
         self.uilogger = uilogger
 
+        self.ib_clients = dict()  # a dict to reference different client by account id
+        self.em_clients = list()  # list of emails only clients
+        self.ems = None           # email sender object
+        self.slack = None         # slack client
+
+        # Retrieve application config from app.json to initialize emailsender and slack
+        with open('conf/app.json', 'r') as cf:
+            conf = json.loads(cf.read())
+
+        if "email_sender" in conf:
+            self.ems = EmailSender(
+                                    conf["email_sender"]["smtp_server"],
+                                    conf["email_sender"]["smtp_port"],
+                                    conf["email_sender"]["sender"],
+                                    self.uilogger
+                                  )
+        if "slack" in conf:
+            self.slack = Slack(
+                               conf['slack']['webhook_path'],
+                               url=conf['slack']['webhook_url'],
+                               channel=conf['slack']['channel'],
+                               username=conf['slack']['username'],
+                               icon=conf['slack']['icon']
+                             )
+
     def process_message(self, peer, mailfrom, rcpttos, data):
         """
         This is the function for smtpServer to receive emails
@@ -48,20 +74,26 @@ class SigServer(SMTPServer):
         """
         # TODO: restrict sender ip via peer?
         self.logger.info(' '.join(["Receiving signal from:", str(peer), ' with\n', data]))
-        # send data to slack channel
-        Slack().send(data)
         # print "mailfrom:", mailfrom
         # print "rcpttos:", rcpttos
         if data:
             ts_signal = TradeStationSignal(data)
             if ts_signal.verify_attributes():
-                self.log_all(' '.join(['verified signal:', ts_signal.action,
-                                       str(ts_signal.quantity), ts_signal.symbol,
-                                       '@', ts_signal.order_type, "\n\n"]))
+                trade_str = ' '.join([
+                                        ts_signal.action, 
+                                        str(ts_signal.quantity), 
+                                        ts_signal.symbol, '@',
+                                        ts_signal.order_type
+                                    ])
 
+                if ts_signal.price:
+                    trade_str += ' price ' + str(ts_signal.price)
+
+                self.log_all(' '.join(['-------> signal:', trade_str, "\n\n"]))
+
+                # sending order to each IB client
                 # make this threaded perhaps?
                 for ib_cli in self.ib_clients.itervalues():
-                    # sending order to each IB client
                     quantity = int(round(ts_signal.quantity * ib_cli.sig_multiplier))
                     ib_cli.placeOrder(ib_cli.nextOrderId, ib_cli.create_contract(ts_signal.symbol, 'stk'),
                                       ib_cli.create_order(self.order_type_map[ts_signal.order_type],
@@ -72,18 +104,38 @@ class SigServer(SMTPServer):
                                            '@', ts_signal.order_type]))
                     ib_cli.nextOrderId += 1
 
+                # send data to slack channel
+                if self.slack:
+                    self.slack.send(trade_str)
+
+                # send to email list
+                if self.ems:
+                    for email in self.em_clients:
+                        # Mobile phone receiving server seems to block email that
+                        # does not have matching "to" header to actual addressee. 
+                        # This makes it impossible to send bulk email in BCC fashion since putting
+                        # addressee in bcc header defeats the purpose of bcc.
+                        # Unfortunately, we'll have to send it one by one to ensure privacy.
+                        self.ems.send([email], 'SigBridge Alert', trade_str)
+
     def run(self):
         """
         This function will read the IB client config file and attempt to connet
         to specified TWS in its own thread.
         :return:
         """
-        with open('conf/ibclients.json', 'r') as cf:
-            ib_conf = json.loads(cf.read())
+        with open('conf/clients.json', 'r') as cf:
+            conf = json.loads(cf.read())
 
-        for ib_host in ib_conf:
+        for client in conf:
+            if 'email' in client:
+                # email client
+                if 'active' in client and client['active']:
+                    self.em_clients.append(client['email'])
+                continue
+
             ib_thread = threading.Thread(target=self.ib_thread,
-                                         kwargs=dict(ib_host=ib_host))
+                                         kwargs=dict(ib_host=client))
             ib_thread.daemon = True
             ib_thread.start()
 
@@ -93,6 +145,12 @@ class SigServer(SMTPServer):
         for ib_cli in self.ib_clients.itervalues():
             if ib_cli:
                 ib_cli.disconnect()
+
+        self.em_clients = list()
+
+        if self.ems:
+            self.ems.quit()
+
         self.close()
 
     def log_all(self, message, level="info"):

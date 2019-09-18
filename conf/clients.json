@@ -11,6 +11,14 @@
     "port": 7497,
     "client_id": 2,
     "sig_multiplier": 1,
+    "active": false
+  },
+  {
+    "email": "6261112222@tmomail.net",
+    "active": true
+  },
+  {
+    "email": "xxxxxxxxx@gmail.com",
     "active": true
   }
 ]
