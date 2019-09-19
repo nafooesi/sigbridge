@@ -30,7 +30,7 @@ class EmailSender:
             self.server.sendmail(self.from_addr, to_addr, msg.as_string())
             self.logger.info("Emailed to: %s" % to_addr[0])
         except:
-            self.logger.error("to_addr", to_addr, " has unexpected error:", sys.exc_info()[0])
+            self.logger.error("to_addr "+ ','.join(to_addr) + " has unexpected error: " + str(sys.exc_info()[0]))
 
     def quit(self):
         self.server.quit()
