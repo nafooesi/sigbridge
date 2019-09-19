@@ -111,6 +111,7 @@ class SigServer(SMTPServer):
                 # send to email list
                 if self.ems:
                     for email in self.em_clients:
+                        self.logger.info("Sending sig email to %s" % email)
                         # Mobile phone receiving server seems to block email that
                         # does not have matching "to" header to actual addressee. 
                         # This makes it impossible to send bulk email in BCC fashion since putting
