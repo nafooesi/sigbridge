@@ -6,19 +6,22 @@ import sys
 
 
 class EmailSender:
-    def __init__(self, server, port, from_addr, logger):
+    def __init__(self, host, port, from_addr, logger):
 
+        self.host = host
+        self.port = port
         self.from_addr = from_addr
         self.logger = logger
 
+    def connect(self):
         try:
-            self.server = SMTP(server, port, timeout=3)
+            self.server = SMTP(self.host, self.port, timeout=3)
         except socket.timeout:
-            self.logger.error("Error: server connection timed out.")
+            self.logger.error("Error: host connection timed out.")
         except socket.gaierror:
-            self.logger.error("Error: unknown server name: %s" % server)
+            self.logger.error("Error: unknown host name: %s" % host)
         except socket.error:
-            self.logger.error("Error: Connection refused for %s" % server)
+            self.logger.error("Error: Connection refused for %s" % host)
 
     def send(self, to_addr, subj, body):
         msg = MIMEText(body)
