@@ -4,7 +4,7 @@ import json
 
 
 class Slack:
-    def __init__(self, webhook_path, url='hooks.slack.com', channel='#sigbridge', 
+    def __init__(self, webhook_path, url='hooks.slack.com', channel='#test_bed',
                     username="sb-bot", icon=":satellite:"):
         self.web_hook_url = url
         self.webhook_path = webhook_path
