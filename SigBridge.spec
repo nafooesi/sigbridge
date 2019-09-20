@@ -4,11 +4,11 @@ block_cipher = None
 
 
 a = Analysis(['SigBridge.py'],
-             pathex=['C:\\Users\\Administrator\\PycharmProjects\\SigBridge'],
+             pathex=['C:\\Users\\IEUser\\Desktop\sigbridge'],
              binaries=[],
              datas=[
 	        ('conf', 'conf'),
-	     	('C:\\Users\\Administrator\\sigbridge_venv\\Lib\\site-packages\\ib', 'ib')
+	     	('C:\\python27\\lib\\site-packages\\ib', 'ib')
 		],
              hiddenimports=[],
              hookspath=[],
