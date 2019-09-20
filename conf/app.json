@@ -2,12 +2,12 @@
   "email_sender": {
     "smtp_server": "mail.twc.com",
     "smtp_port": 587,
-    "sender": "xxxxxx@san.rr.com"
+    "sender": "xxxxxx@roadrunner.com"
   },
   "slack": {
     "webhook_url": "hooks.slack.com",
-    "webhook_path": "/services/T2GLAPJHM/B4H2LRVS9/7fSoJ9VIrY5v5E0TQvML5kgC",
-    "channel": "#sigbridge",
+    "webhook_path": "/services/WEBHOOK_TOKEN_STRING",
+    "channel": "#test_bed",
     "username": "sb-bot",
     "icon": ":satellite:"
   }
