@@ -125,7 +125,7 @@ class SigBridgeUI(Tk):
             self.server_thread.start()
             self.server_button.configure(text="Disconnect", command=self.stop_server)
         except Exception as err:
-            print "Cannot start the server: %s" % err.message
+            self.uilogger("Cannot start the server: %s" % err.message)
 
         # self.label_variable.set(self.entry_variable.get()+"(Started Signal Server)")
         # self.entry.focus_set()
