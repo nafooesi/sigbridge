@@ -18,6 +18,7 @@ class SigServer(SMTPServer):
     order_type_map = {'market': 'mkt'}
 
     # --- creating log file handler --- #
+    # TODO: make a logging module
     if not os.path.isdir('logs'):
         os.makedirs('logs')
     logger = logging.getLogger("SigServer")
@@ -28,7 +29,7 @@ class SigServer(SMTPServer):
                                   interval=1, backupCount=10)
     fh.setLevel(logging.INFO)
     formatter = logging.Formatter('%(asctime)s - %(process)d - %(name)s '
-                                  '(%(levelname)s) : %(message)s')
+                                  '(%(lineno)d) %(levelname)s: %(message)s')
     fh.setFormatter(formatter)
     logger.addHandler(fh)
     # --- Done creating log file handler --- #
@@ -110,6 +111,8 @@ class SigServer(SMTPServer):
 
                 # send to email list
                 if self.ems:
+                    # make a fresh connection
+                    self.ems.connect()
                     for email in self.em_clients:
                         self.logger.info("Sending sig email to %s" % email)
                         # Mobile phone receiving server seems to block email that
@@ -118,6 +121,7 @@ class SigServer(SMTPServer):
                         # addressee in bcc header defeats the purpose of bcc.
                         # Unfortunately, we'll have to send it one by one to ensure privacy.
                         self.ems.send([email], 'SigBridge Alert', trade_str)
+                    self.ems.quit()
 
     def run(self):
         """
@@ -129,18 +133,24 @@ class SigServer(SMTPServer):
             conf = json.loads(cf.read())
 
         for client in conf:
+            # add email client to a list
             if 'email' in client:
                 # email client
                 if 'active' in client and client['active']:
                     self.em_clients.append(client['email'])
                 continue
 
+            # create a thread per IB client
             ib_thread = threading.Thread(target=self.ib_thread,
                                          kwargs=dict(ib_host=client))
             ib_thread.daemon = True
             ib_thread.start()
 
-        asyncore.loop()
+        try:
+            asyncore.loop(timeout=0.8)
+        except Exception as e:
+            # captures 'Bad file descriptor' error when server quits.
+            self.logger.error(e)
 
     def shutdown(self):
         for ib_cli in self.ib_clients.itervalues():
@@ -148,10 +158,6 @@ class SigServer(SMTPServer):
                 ib_cli.disconnect()
 
         self.em_clients = list()
-
-        if self.ems:
-            self.ems.quit()
-
         self.close()
 
     def log_all(self, message, level="info"):
