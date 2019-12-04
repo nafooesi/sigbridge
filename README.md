@@ -4,6 +4,7 @@ This is a python (v2.7) application with minimal UI that replicates trade signal
 ## Dependencies
 - ibpy2
 - pyinstaller
+- pyyaml
 
 ## Configuration
 IB clients are configured in a yaml file under "conf" dir. 
