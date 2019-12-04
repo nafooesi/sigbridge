@@ -8,7 +8,7 @@ from logging.handlers import TimedRotatingFileHandler
 import logging
 import os
 import re
-import json
+import yaml
 
 
 class IBWrapper:
@@ -50,8 +50,8 @@ class IBWrapper:
         # self.con.registerAll(self.reply_handler)
 
         # reading ib's symbol mapping
-        with open('conf/ibsymbols.json', 'r') as cf:
-            self.symbol_map = json.loads(cf.read())
+        with open('conf/ibsymbols.yml', 'r') as cf:
+            self.symbol_map = yaml.load(cf, Loader=yaml.FullLoader)
 
     def connect(self):
         if self.con.connect():

@@ -1,0 +1,10 @@
+email_sender:
+    smtp_server: 'mail.twc.com'
+    smtp_port: 587
+    sender: 'xxxxxx@roadrunner.com'
+slack":
+    webhook_url: 'hooks.slack.com'
+    webhook_path: '/services/WEBHOOK_TOKEN_STRING'
+    channel: '#test_bed'
+    username: 'sb-bot'
+    icon: ':satellite:'

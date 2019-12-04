@@ -1,0 +1,17 @@
+- server: 'localhost'
+  port: 7496
+  client_id: 1
+  sig_multiplier: 1.5
+  active: false
+
+- server: 'localhost'
+  port: 7497
+  client_id: 2
+  sig_multiplier: 1
+  active: false
+
+- email: '6263198202@tmomail.net'
+  active: true
+
+- email: 'bchi15@roadrunner.com'
+  active: true

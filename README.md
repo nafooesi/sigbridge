@@ -6,7 +6,7 @@ This is a python (v2.7) application with minimal UI that replicates trade signal
 - pyinstaller
 
 ## Configuration
-IB clients are configured in a json file under "conf" dir. 
+IB clients are configured in a yaml file under "conf" dir. 
 The attributes in the config file should be self explainatory.  
 TradeStation needs to have "Trade manager" configured to send open/filled order emails to the host computer's IP where this program resides.  It should be "localhost" in the smtp field if they are on the same computer.
 
