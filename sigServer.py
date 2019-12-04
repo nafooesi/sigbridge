@@ -1,4 +1,4 @@
-import json
+import yaml
 import asyncore
 import os
 import logging
@@ -43,9 +43,9 @@ class SigServer(SMTPServer):
         self.ems = None           # email sender object
         self.slack = None         # slack client
 
-        # Retrieve application config from app.json to initialize emailsender and slack
-        with open('conf/app.json', 'r') as cf:
-            conf = json.loads(cf.read())
+        # Retrieve application config from app.yml to initialize emailsender and slack
+        with open('conf/app.yml', 'r') as cf:
+            conf = yaml.load(cf, Loader=yaml.FullLoader)
 
         if "email_sender" in conf:
             self.ems = EmailSender(
@@ -74,63 +74,68 @@ class SigServer(SMTPServer):
         :return:
         """
         # TODO: restrict sender ip via peer?
-        self.logger.info(' '.join(["Receiving signal from:", str(peer), ' with\n', data]))
-        # print "mailfrom:", mailfrom
-        # print "rcpttos:", rcpttos
-        if data:
-            ts_signal = TradeStationSignal(data)
-            if ts_signal.verify_attributes():
-                trade_str = ' '.join([
-                                        ts_signal.action, 
-                                        str(ts_signal.quantity), 
-                                        ts_signal.symbol, '@',
-                                        ts_signal.order_type
-                                    ])
+        self.logger.info(' '.join(["Receiving signal from:",
+                                   str(peer), ' with\n', data]))
 
-                if ts_signal.price:
-                    trade_str += ' price ' + str(ts_signal.price)
+        if not data:
+            return
 
-                self.log_all(' '.join(['-------> signal:', trade_str, "\n\n"]))
+        ts_signal = TradeStationSignal(data)
+        if not ts_signal.verify_attributes():
+            return
 
-                # sending order to each IB client
-                # make this threaded perhaps?
-                for ib_cli in self.ib_clients.itervalues():
-                    quantity = int(round(ts_signal.quantity * ib_cli.sig_multiplier))
-                    ib_cli.placeOrder(ib_cli.nextOrderId, ib_cli.create_contract(ts_signal.symbol, 'stk'),
-                                      ib_cli.create_order(self.order_type_map[ts_signal.order_type],
-                                                          quantity, ts_signal.action))
+        trade_str = ' '.join([
+                                ts_signal.action,
+                                str(ts_signal.quantity),
+                                ts_signal.symbol, '@',
+                                ts_signal.order_type
+                            ])
 
-                    self.log_all(' '.join(["sent", ib_cli.account_id, ts_signal.action,
-                                           str(quantity), ts_signal.symbol,
-                                           '@', ts_signal.order_type]))
-                    ib_cli.nextOrderId += 1
+        if ts_signal.price:
+            # add price to signal if it has it.
+            trade_str += ' price ' + str(ts_signal.price)
 
-                # send data to slack channel
-                if self.slack:
-                    self.slack.send(trade_str)
+        self.log_all(' '.join(['-------> signal:', trade_str, "\n\n"]))
 
-                # send to email list
-                if self.ems:
-                    # make a fresh connection
-                    self.ems.connect()
-                    for email in self.em_clients:
-                        self.logger.info("Sending sig email to %s" % email)
-                        # Mobile phone receiving server seems to block email that
-                        # does not have matching "to" header to actual addressee. 
-                        # This makes it impossible to send bulk email in BCC fashion since putting
-                        # addressee in bcc header defeats the purpose of bcc.
-                        # Unfortunately, we'll have to send it one by one to ensure privacy.
-                        self.ems.send([email], 'SigBridge Alert', trade_str)
-                    self.ems.quit()
+        # sending order to each IB client
+        # make this threaded perhaps?
+        for ib_cli in self.ib_clients.itervalues():
+            quantity = int(round(ts_signal.quantity * ib_cli.sig_multiplier))
+            ib_cli.placeOrder(ib_cli.nextOrderId, ib_cli.create_contract(ts_signal.symbol, 'stk'),
+                              ib_cli.create_order(self.order_type_map[ts_signal.order_type],
+                                                  quantity, ts_signal.action))
+
+            self.log_all(' '.join(["sent", ib_cli.account_id, ts_signal.action,
+                                   str(quantity), ts_signal.symbol,
+                                   '@', ts_signal.order_type]))
+            ib_cli.nextOrderId += 1
+
+        # send data to slack channel
+        if self.slack:
+            self.slack.send(trade_str)
+
+        # send to email list
+        if self.ems:
+            # make a fresh connection
+            self.ems.connect()
+            for email in self.em_clients:
+                self.logger.info("Sending sig email to %s" % email)
+                # Mobile phone receiving server seems to block email that
+                # does not have matching "to" header to actual addressee.
+                # This makes it impossible to send bulk email in BCC fashion since putting
+                # addressee in bcc header defeats the purpose of bcc.
+                # Unfortunately, we'll have to send it one by one to ensure privacy.
+                self.ems.send([email], 'SigBridge Alert', trade_str)
+            self.ems.quit()
 
     def run(self):
         """
-        This function will read the IB client config file and attempt to connet
+        This function will read the IB client config file and attempt to connect
         to specified TWS in its own thread.
         :return:
         """
-        with open('conf/clients.json', 'r') as cf:
-            conf = json.loads(cf.read())
+        with open('conf/clients.yml', 'r') as cf:
+            conf = yaml.load(cf, Loader=yaml.FullLoader)
 
         for client in conf:
             # add email client to a list
