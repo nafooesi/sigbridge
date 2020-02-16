@@ -10,6 +10,8 @@ import os
 import re
 import yaml
 
+TS2IB_ORDER_TYPE_MAP = {'market': 'mkt'}
+
 
 class IBWrapper:
     nextOrderId = 0
@@ -31,12 +33,12 @@ class IBWrapper:
     logger.addHandler(fh)
     # --- Done creating log file handler --- #
 
-    def __init__(self, ip, port, client_id, sig_multiplier=1, uilogger=None):
-
-        self.con_str = ''.join([ip, ":", str(port)])
-        self.con = ibConnection(ip, port, client_id)
-        self.sig_multiplier = sig_multiplier
+    def __init__(self, ib_host, uilogger=None):
+        self.con_str = ''.join([ib_host['server'], ":", str(ib_host['port'])])
+        self.con = ibConnection(ib_host['server'], ib_host['port'], ib_host['client_id'])
+        self.sig_multiplier = ib_host['sig_multiplier'] or 0.01
         self.uilogger = uilogger
+        self.skip_list = ib_host.get('skip_list', list())
 
         # Assign corresponding handling function to message types
         self.con.register(self.my_account_handler, 'UpdateAccountValue')
@@ -163,13 +165,34 @@ class IBWrapper:
             if self.uilogger:
                 self.uilogger.error(message)
 
+    def process_order(self, ts_signal):
+
+        # check if this cient has skip list and whether the signal
+        # is in this list
+        if len(self.skip_list) and ts_signal.symbol in self.skip_list:
+            return
+
+        quantity = int(round(ts_signal.quantity * self.sig_multiplier))
+        self.placeOrder(self.nextOrderId,
+                        self.create_contract(ts_signal.symbol, 'stk'),
+                        self.create_order(
+                            TS2IB_ORDER_TYPE_MAP[ts_signal.order_type],
+                            quantity,
+                            ts_signal.action)
+                        )
+
+        self.log_all(' '.join(["sent", self.account_id, ts_signal.action,
+                               str(quantity), ts_signal.symbol,
+                               '@', ts_signal.order_type]))
+        self.nextOrderId += 1
+
 
 if __name__ == '__main__':
     # print 'acct update...'
     # con.reqAccountUpdates(1, '')
     # sleep(1)
 
-    ib = IBWrapper('localhost', 7496, 1)
+    ib = IBWrapper({'server': 'localhost', 'port': 7496, 'sig_multiplier': 1})
     ib.connect()
 
     # Create an order ID which is 'global' for this session. This

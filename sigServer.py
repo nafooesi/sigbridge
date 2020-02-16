@@ -15,7 +15,6 @@ from tradeStationSignal import TradeStationSignal
 
 
 class SigServer(SMTPServer):
-    order_type_map = {'market': 'mkt'}
 
     # --- creating log file handler --- #
     # TODO: make a logging module
@@ -100,15 +99,7 @@ class SigServer(SMTPServer):
         # sending order to each IB client
         # make this threaded perhaps?
         for ib_cli in self.ib_clients.itervalues():
-            quantity = int(round(ts_signal.quantity * ib_cli.sig_multiplier))
-            ib_cli.placeOrder(ib_cli.nextOrderId, ib_cli.create_contract(ts_signal.symbol, 'stk'),
-                              ib_cli.create_order(self.order_type_map[ts_signal.order_type],
-                                                  quantity, ts_signal.action))
-
-            self.log_all(' '.join(["sent", ib_cli.account_id, ts_signal.action,
-                                   str(quantity), ts_signal.symbol,
-                                   '@', ts_signal.order_type]))
-            ib_cli.nextOrderId += 1
+            ib_cli.process_order(ts_signal)
 
         # send data to slack channel
         if self.slack:
@@ -118,6 +109,9 @@ class SigServer(SMTPServer):
         if self.ems:
             # make a fresh connection
             self.ems.connect()
+            if len(self.em_clients) == 0:
+                self.logger.info("No email clients found.")
+
             for email in self.em_clients:
                 self.logger.info("Sending sig email to %s" % email)
                 # Mobile phone receiving server seems to block email that
@@ -127,6 +121,8 @@ class SigServer(SMTPServer):
                 # Unfortunately, we'll have to send it one by one to ensure privacy.
                 self.ems.send([email], 'SigBridge Alert', trade_str)
             self.ems.quit()
+        else:
+            self.logger.info("No email sender initialized.")
 
     def run(self):
         """
@@ -193,8 +189,7 @@ class SigServer(SMTPServer):
             # skip inactive client
             return
 
-        ib = IBWrapper(ib_host['server'], ib_host['port'], ib_host['client_id'],
-                       ib_host['sig_multiplier'], self.uilogger)
+        ib = IBWrapper(ib_host, self.uilogger)
         wait_sec = 5
         while not ib.account_id:
             ib.connect()
