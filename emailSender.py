@@ -1,7 +1,6 @@
-import sys
 import socket
 from time import sleep
-from smtplib import SMTP, SMTPServerDisconnected
+from smtplib import SMTP
 from email.mime.text import MIMEText
 
 
@@ -37,7 +36,7 @@ class EmailSender:
                 self.server.sendmail(self.from_addr, to_addr, msg.as_string())
                 self.logger.info("Emailed to: %s" % to_addr[0])
                 break
-            except SMTPServerDisconnected:
+            except:
                 if sleep_time <= self.max_sleep_time:
                     sleep(sleep_time)
                     sleep_time *= 2
@@ -47,12 +46,6 @@ class EmailSender:
                     self.logger.error("to_addr " + ','.join(to_addr) +
                                       " max retry on disconect reached")
                     break
-            except:
-                # Some other exception
-                self.logger.error("to_addr " + ','.join(to_addr) +
-                                  " has unexpected error: " +
-                                  str(sys.exc_info()[0]))
-                break
 
     def quit(self):
         self.server.quit()
