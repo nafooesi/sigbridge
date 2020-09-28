@@ -6,7 +6,7 @@ import threading
 
 from smtpd import SMTPServer
 from logging.handlers import TimedRotatingFileHandler
-from time import sleep
+from time import sleep, time
 
 from ibWrapper import IBWrapper
 from slack import Slack
@@ -51,8 +51,11 @@ class SigServer(SMTPServer):
                                     conf["email_sender"]["smtp_server"],
                                     conf["email_sender"]["smtp_port"],
                                     conf["email_sender"]["sender"],
-                                    self.uilogger
+                                    self.uilogger,
+                                    conf["email_sender"]["max_retry"],
+                                    conf["email_sender"]["queue_time"]
                                   )
+
         if "slack" in conf:
             self.slack = Slack(
                                conf['slack']['webhook_path'],
@@ -107,8 +110,8 @@ class SigServer(SMTPServer):
 
         # send to email list
         if self.ems:
-            # make a fresh connection
-            self.ems.connect()
+            self.ems.queue_trade(trade_str)
+        """
             if len(self.em_clients) == 0:
                 self.logger.info("No email clients found.")
 
@@ -120,9 +123,9 @@ class SigServer(SMTPServer):
                 # addressee in bcc header defeats the purpose of bcc.
                 # Unfortunately, we'll have to send it one by one to ensure privacy.
                 self.ems.send([email], 'SigBridge Alert', trade_str)
-            self.ems.quit()
         else:
             self.logger.info("No email sender initialized.")
+        """
 
     def run(self):
         """
@@ -141,11 +144,18 @@ class SigServer(SMTPServer):
                     self.em_clients.append(client['email'])
                 continue
 
-            # create a thread per IB client
+            # create a thread to connect each IB client so that it's non-blocking
             ib_thread = threading.Thread(target=self.ib_thread,
                                          kwargs=dict(ib_host=client))
             ib_thread.daemon = True
             ib_thread.start()
+
+        if self.ems:
+            # start email sender daemon
+            ems_thread = threading.Thread(target=self.ems.daemon_sender,
+                                          args=(self.em_clients,))
+            ems_thread.daemon = True
+            ems_thread.start()
 
         try:
             asyncore.loop(timeout=0.8)
