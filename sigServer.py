@@ -37,10 +37,11 @@ class SigServer(SMTPServer):
         SMTPServer.__init__(self, laddr, raddr)
         self.uilogger = uilogger
 
-        self.ib_clients = dict()  # a dict to reference different client by account id
-        self.em_clients = list()  # list of emails only clients
-        self.ems = None           # email sender object
-        self.slack = None         # slack client
+        self.ib_clients = dict()    # a dict to reference different client by account id
+        self.em_clients = list()    # list of emails only clients
+        self.ems = None             # email sender object
+        self.slack = None           # slack client
+        self.sig_shutdown = False   # signal to shut down
 
         # Retrieve application config from app.yml to initialize emailsender and slack
         with open('conf/app.yml', 'r') as cf:
@@ -52,8 +53,9 @@ class SigServer(SMTPServer):
                                     conf["email_sender"]["smtp_port"],
                                     conf["email_sender"]["sender"],
                                     self.uilogger,
-                                    conf["email_sender"]["max_retry"],
-                                    conf["email_sender"]["queue_time"]
+                                    max_retry=conf["email_sender"].get("max_retry", 7),
+                                    queue_time=conf["email_sender"].get("queue_time", 5),
+                                    send_opt=conf["email_sender"].get("send_opt", 1)
                                   )
 
         if "slack" in conf:
@@ -99,33 +101,42 @@ class SigServer(SMTPServer):
 
         self.log_all(' '.join(['-------> signal:', trade_str, "\n\n"]))
 
-        # sending order to each IB client
-        # make this threaded perhaps?
-        for ib_cli in self.ib_clients.itervalues():
-            ib_cli.process_order(ts_signal)
+        try:
+            # sending order to each IB client
+            # make this threaded perhaps?
+            for ib_cli in self.ib_clients.itervalues():
+                ib_cli.process_order(ts_signal)
+        except Exception as e:
+            self.log_all('<IB Client> ' + str(e), level="error")
 
         # send data to slack channel
         if self.slack:
-            self.slack.send(trade_str)
-
-        # send to email list
-        if self.ems:
-            self.ems.queue_trade(trade_str)
-        """
-            if len(self.em_clients) == 0:
-                self.logger.info("No email clients found.")
-
-            for email in self.em_clients:
-                self.logger.info("Sending sig email to %s" % email)
-                # Mobile phone receiving server seems to block email that
-                # does not have matching "to" header to actual addressee.
-                # This makes it impossible to send bulk email in BCC fashion since putting
-                # addressee in bcc header defeats the purpose of bcc.
-                # Unfortunately, we'll have to send it one by one to ensure privacy.
-                self.ems.send([email], 'SigBridge Alert', trade_str)
+            self.process_slack(trade_str)
         else:
-            self.logger.info("No email sender initialized.")
-        """
+            self.logger.info(" --- No slack configuration found.")
+
+        try:
+            # send to email list
+            if self.ems:
+                self.ems.queue_trade(trade_str)
+            else:
+                self.logger.info(" --- No email client configuration found.")
+        except Exception as e:
+            self.log_all('<Email Client> ' + str(e), level="error")
+
+    def process_slack(self, trade_str):
+        try_cnt = 0
+        while try_cnt <= 5:
+            try:
+                self.slack.send(trade_str)
+                break
+            except Exception as e:
+                try_cnt += 1
+                if try_cnt > 5:
+                    self.log_all('<Slack Client> ' + str(e), level="error")
+                else:
+                    self.log_all('<Slack Client> ' + str(e), level="info")
+                sleep(try_cnt)
 
     def run(self):
         """
@@ -157,6 +168,7 @@ class SigServer(SMTPServer):
             ems_thread.daemon = True
             ems_thread.start()
 
+        self.sig_shutdown = False
         try:
             asyncore.loop(timeout=0.8)
         except Exception as e:
@@ -164,6 +176,7 @@ class SigServer(SMTPServer):
             self.logger.error(e)
 
     def shutdown(self):
+        self.sig_shutdown = True
         for ib_cli in self.ib_clients.itervalues():
             if ib_cli:
                 ib_cli.disconnect()
@@ -200,8 +213,12 @@ class SigServer(SMTPServer):
             return
 
         ib = IBWrapper(ib_host, self.uilogger)
+        connected = ib.connect()
+        """
         wait_sec = 5
         while not ib.account_id:
+            if self.sig_shutdown:
+                return
             ib.connect()
             if not ib.account_id:
                 self.log_all(' '.join(
@@ -209,7 +226,10 @@ class SigServer(SMTPServer):
                      "retrying in", str(wait_sec), "seconds."]
                 ), 'error')
                 sleep(wait_sec)
-            wait_sec = int(wait_sec * 1.5)      # relax the wait time by 50% on each retry
-
-        self.ib_clients[ib.account_id] = ib     # provides a reference to ib client for interaction
-        self.log_all('Connected to IB account: ' + ib.account_id)
+            wait_sec = int(wait_sec * 1.5)   # relax the wait time by 50% on each retry
+        """
+        if connected:
+            self.ib_clients[ib.account_id] = ib  # provides a reference to ib client for interaction
+            self.log_all('Connected to IB account: ' + ib.account_id)
+        else:
+            self.log_all(' '.join(['Failed to connect to', ib_host['server'], ':', str(ib_host['port'])]))

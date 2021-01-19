@@ -16,6 +16,7 @@ TS2IB_ORDER_TYPE_MAP = {'market': 'mkt'}
 class IBWrapper:
     nextOrderId = 0
     account_id = None
+    reconnected = False
 
     # --- creating log file handler --- #
     if not os.path.isdir('logs'):
@@ -27,7 +28,7 @@ class IBWrapper:
     fh = TimedRotatingFileHandler('logs/IBWrapper.log', when='d',
                                   interval=1, backupCount=10)
     fh.setLevel(logging.INFO)
-    formatter = logging.Formatter('%(asctime)s - %(process)d - %(name)s '
+    formatter = logging.Formatter('%(asctime)s - %(process)d - %(name)s (%(lineno)d)'
                                   '(%(levelname)s) : %(message)s')
     fh.setFormatter(formatter)
     logger.addHandler(fh)
@@ -56,11 +57,26 @@ class IBWrapper:
             self.symbol_map = yaml.load(cf, Loader=yaml.FullLoader)
 
     def connect(self):
-        if self.con.connect():
-            self.logger.info('connected to IB on ' + self.con_str)
-            # give it a second to get data
-            sleep(1)
-        # raise ValueError('Fail to connect to IB!')
+        cnt = 0
+        while True:
+            if self.con.connect():
+                if self.account_id:
+                    self.log_all('Connected to IB account: ' + self.account_id)
+                # self.logger.info('connected to IB on ' + self.con_str)
+                # give it a second to get data
+                sleep(1)
+                return True
+            else:
+                # keep max retry count
+                cnt += 1
+                if cnt > 15:
+                    return False
+                sleep_time = 2 * cnt
+                acct = self.account_id if self.account_id else self.con_str
+                self.log_all('Not connected to IB account %s, will retry in %d sec...' % 
+                             (acct, sleep_time),
+                             'error')
+                sleep(sleep_time)
 
     def my_account_handler(self, msg):
         self.logger.info(msg)
@@ -94,7 +110,11 @@ class IBWrapper:
             err_msg = regex.group(2)
             self.logger.error("IB Error [code: %s, message: %s]" % (err_code, err_msg))
             if err_code == 'None' and err_msg.startswith('unpack requires a string'):
-                self.log_all("IB account " + self.account_id + " was shutdown!", 'error')
+                self.log_all("IB account " + str(self.account_id) + " was shutdown!", 'error')
+            if err_code == '504' and err_msg.startswith('Not connected'):
+                self.log_all("IB account not connected.  Will try connecting.", 'error')
+                self.connect()
+                self.reconnected = True  # turn on flag to resubmit order
         else:
             self.logger.error("IB Error: %s" % msg)
 
@@ -166,7 +186,6 @@ class IBWrapper:
                 self.uilogger.error(message)
 
     def process_order(self, ts_signal):
-
         # check if this cient has skip list and whether the signal
         # is in this list
         if len(self.skip_list) and ts_signal.symbol in self.skip_list:
@@ -180,6 +199,19 @@ class IBWrapper:
                             quantity,
                             ts_signal.action)
                         )
+
+        # placeOrder will caused an error if IB is not connected.  It will
+        # attempt to reconnect, but the order will need to be re-submited.
+        # so we'll check the reconnection flag here and resubmit.
+        if self.reconnected:
+            self.placeOrder(self.nextOrderId,
+                        self.create_contract(ts_signal.symbol, 'stk'),
+                        self.create_order(
+                            TS2IB_ORDER_TYPE_MAP[ts_signal.order_type],
+                            quantity,
+                            ts_signal.action)
+                        )
+            self.reconnected = False
 
         self.log_all(' '.join(["sent", self.account_id, ts_signal.action,
                                str(quantity), ts_signal.symbol,

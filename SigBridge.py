@@ -77,13 +77,16 @@ class SigBridgeUI(Tk):
         # Setup the update_widget callback reading logs from the queue
         self.start_log()
 
+        # Start server automatically
+        self.start_server()
+
     def clear_log(self):
         self.log_widget.config(state='normal')
         self.log_widget.delete(0.0, END)
         self.log_widget.config(state='disabled')
 
     def start_log(self):
-        self.uilogger.info("SigBridge Started.")
+        # self.uilogger.info("SigBridge Started.")
         self.update_widget()
         # self.control_log_button.configure(text="Pause Log", command=self.stop_log)
 
@@ -125,7 +128,7 @@ class SigBridgeUI(Tk):
             self.server_thread.start()
             self.server_button.configure(text="Disconnect", command=self.stop_server)
         except Exception as err:
-            self.uilogger("Cannot start the server: %s" % err.message)
+            self.uilogger.error("Cannot start the server: %s" % err.message)
 
         # self.label_variable.set(self.entry_variable.get()+"(Started Signal Server)")
         # self.entry.focus_set()

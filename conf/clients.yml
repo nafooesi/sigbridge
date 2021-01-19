@@ -2,26 +2,25 @@
   port: 7497
   client_id: 2
   sig_multiplier: 1
-  active: True
+  active: False
 
 - server: '192.168.1.119'
   port: 7496
   client_id: 1
   sig_multiplier: 0.125
-  active: True
+  active: False
 
-- server: '192.168.1.119'
+- server: 'localhost'
   port: 7498
   client_id: 3
   sig_multiplier: 0.1
   active: True
   skip_list:
-    - aapl
     - msft
     - tsla
 
-- email: '6261112222@tmomail.net'
-  active: True
+- email: phone_number@tmomail.net
+  active: False
 
-- email: 'email@roadrunner.com'
-  active: True
+- email: user@gmail.com
+  active: False
