@@ -1,7 +1,9 @@
 email_sender:
-    smtp_server: 'mail.twc.com'
-    smtp_port: 587
-    sender: '____@roadrunner.com'
+    smtp_server: 'smtp.sendgrid.net'
+    smtp_port: 465
+    sender: '------@gmail.com'
+    user: 'apikey'
+    password: ''
     queue_time: 5
     max_retry: 7
     send_opt: 1

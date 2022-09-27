@@ -53,6 +53,8 @@ class SigServer(SMTPServer):
                                     conf["email_sender"]["smtp_port"],
                                     conf["email_sender"]["sender"],
                                     self.uilogger,
+                                    conf["email_sender"]["user"],
+                                    conf["email_sender"]["password"],
                                     max_retry=conf["email_sender"].get("max_retry", 7),
                                     queue_time=conf["email_sender"].get("queue_time", 5),
                                     send_opt=conf["email_sender"].get("send_opt", 1)

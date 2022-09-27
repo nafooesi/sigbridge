@@ -1,6 +1,6 @@
 import re
 from time import sleep
-from smtplib import SMTP
+from smtplib import SMTP, SMTP_SSL
 from Queue import Queue
 from email.mime.text import MIMEText
 
@@ -8,19 +8,26 @@ from email.mime.text import MIMEText
 REG_TXT = re.compile('\d{10}@.+')
 
 class EmailSender:
-    def __init__(self, host, port, from_addr, logger, max_retry=7, queue_time=5, send_opt=1):
+    def __init__(self, host, port, from_addr, logger, user, password, max_retry=5, queue_time=5, send_opt=1):
         self.host = host
         self.port = port
         self.from_addr = from_addr
         self.logger = logger
         self.server = None
+        self.user = user
+        self.password = password
         self.msg_queue = Queue()        # used to queue messages
         self.max_retry = max_retry      # max retry count for sending email
         self.queue_time = queue_time    # queue wait time in seconds
         self.send_opt = send_opt
 
     def connect(self):
-        self.server = SMTP(self.host, self.port, timeout=3)
+        # user SSL SMTP if user and password are present
+        if self.user and self.password:
+            self.server = SMTP_SSL(self.host, self.port)
+            self.server.login(self.user, self.password) 
+        else:
+            self.server = SMTP(self.host, self.port, timeout=3)
 
     def send(self, to_addr, subj, body):
         if not to_addr:
@@ -39,22 +46,30 @@ class EmailSender:
                 if not self.test_conn_open():
                     self.connect()
                 self.server.sendmail(self.from_addr, to_addr, msg.as_string())
-                retry_sec += 1
+                msg = "Emailed to: %s" % ','.join(to_addr)
                 if self.logger:
-                    self.logger.info("Emailed to: %s" % ','.join(to_addr))
+                    self.logger.info(msg)
                 else:
-                    print("Emailed to: %s" % ','.join(to_addr))
+                    print(msg)
                 break
             except Exception as e:
+                retry_sec += 1
                 if self.logger:
-                    self.logger.info(e)
+                    self.logger.error(e)
+                else:
+                    print(str(e))
                 if retry_sec >= self.max_retry:
+                    msg = "Max retry reached. Fails to send email!"
                     if self.logger:
-                        self.logger.error(
-                            "Max retry reached. Fails to send email!")
+                        self.logger.error(msg)
+                    else:
+                        print(msg)
                     break
+                msg = "retrying ..."
                 if self.logger:
-                    self.logger.info("retrying ...")
+                    self.logger.error(msg)
+                else:
+                    print(msg)
                 sleep(retry_sec * 2)
 
     def daemon_sender(self, email_list):
@@ -124,14 +139,15 @@ class EmailSender:
         self.server.quit()
 
 if __name__ == '__main__':
-    smtp_server = 'mail.twc.com'
-    smtp_port = 587
-    sender = 'bchi15@roadrunner.com'
-    addrs = ['bowei.chi@gmail.com', '6263198202@tmomail.net', 'nafooesi@gmail.com']
-    body = 'Just testing out email for bcc addrs.'
+    # smtp_server = 'mail.twc.com'
+    # sender = ''  # needs to be a roadrunner email.
+    smtp_server = 'smtp.sendgrid.net'
+    smtp_port = 465
+    sender = '' # needs to be an authorized email address
+    addrs = ['test@gmail.com', 'test-phone-number@tmomail.net']
+    body = 'Just testing sandgrid mails 3.'
 
-    es = EmailSender(smtp_server, smtp_port, sender, None)
+    es = EmailSender(smtp_server, smtp_port, sender, None, 'apikey', 'sendgrid_api_key')
     # es.batch_sorter(addrs, body)
-    es.send(addrs, 'bcc SigBridge Alert', body)
-    
+    es.send(addrs, 'Testing Sendgrid Alert 3', body)
 
