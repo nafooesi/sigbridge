@@ -4,17 +4,19 @@
   sig_multiplier: 1
   active: False
 
-- server: '192.168.1.119'
+- server: 'localhost'
   port: 7496
   client_id: 1
-  sig_multiplier: 0.125
-  active: False
+  sig_multiplier: 1
+  active: True
+  security_types:
+    fut: 1
 
 - server: 'localhost'
   port: 7498
   client_id: 3
   sig_multiplier: 0.1
-  active: True
+  active: False
   skip_list:
     - msft
     - tsla

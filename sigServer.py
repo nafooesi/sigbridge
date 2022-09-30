@@ -42,6 +42,7 @@ class SigServer(SMTPServer):
         self.ems = None             # email sender object
         self.slack = None           # slack client
         self.sig_shutdown = False   # signal to shut down
+        self.ts_signal_conf = None  # configuration for TS signal parsing
 
         # Retrieve application config from app.yml to initialize emailsender and slack
         with open('conf/app.yml', 'r') as cf:
@@ -68,6 +69,7 @@ class SigServer(SMTPServer):
                                username=conf['slack']['username'],
                                icon=conf['slack']['icon']
                              )
+        self.ts_signal_conf = conf.get('ts_signal', {})
 
     def process_message(self, peer, mailfrom, rcpttos, data):
         """
@@ -86,7 +88,7 @@ class SigServer(SMTPServer):
         if not data:
             return
 
-        ts_signal = TradeStationSignal(data)
+        ts_signal = TradeStationSignal(data, self.ts_signal_conf)
         if not ts_signal.verify_attributes():
             return
 
@@ -207,29 +209,12 @@ class SigServer(SMTPServer):
         :param ib_host:
         :return:
         """
-        if not ib_host:
-            return
-
-        if 'active' in ib_host and not ib_host['active']:
+        if not (ib_host and ib_host.get('active')):
             # skip inactive client
             return
 
         ib = IBWrapper(ib_host, self.uilogger)
         connected = ib.connect()
-        """
-        wait_sec = 5
-        while not ib.account_id:
-            if self.sig_shutdown:
-                return
-            ib.connect()
-            if not ib.account_id:
-                self.log_all(' '.join(
-                    ["Failed to connect to", ib_host['server'], ':', str(ib_host['port']),
-                     "retrying in", str(wait_sec), "seconds."]
-                ), 'error')
-                sleep(wait_sec)
-            wait_sec = int(wait_sec * 1.5)   # relax the wait time by 50% on each retry
-        """
         if connected:
             self.ib_clients[ib.account_id] = ib  # provides a reference to ib client for interaction
             self.log_all('Connected to IB account: ' + ib.account_id)

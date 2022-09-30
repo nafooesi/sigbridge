@@ -9,7 +9,7 @@ server = 'localhost'
 port = 25
 smtp_server = None
 
-def send(quantity=100):
+def send(quantity=2):
     global server
     global port
     global smtp_server
@@ -71,7 +71,7 @@ def send(quantity=100):
 
 
 if __name__ == '__main__':
-    quantity = 200
+    quantity = 2
     for i in range(1):
         print("sending %d" % i)
         send(quantity + i)
