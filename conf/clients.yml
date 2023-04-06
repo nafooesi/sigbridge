@@ -4,20 +4,24 @@
   sig_multiplier: 1
   active: False
 
-- server: '192.168.1.119'
+- server: 'localhost'
   port: 7496
   client_id: 1
-  sig_multiplier: 0.125
-  active: False
+  sig_multiplier: 1
+  active: True
 
 - server: 'localhost'
   port: 7498
   client_id: 3
   sig_multiplier: 0.1
-  active: True
+  active: False
   skip_list:
     - msft
     - tsla
+
+- fix_cfg_path: './conf/wex_dv.cfg'
+  sig_multiplier: 1
+  active: True
 
 - email: phone_number@tmomail.net
   active: False

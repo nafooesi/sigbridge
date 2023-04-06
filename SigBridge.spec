@@ -3,7 +3,7 @@
 block_cipher = None
 
 
-a = Analysis(['SigBridge.py'],
+a = Analysis(['sig_bridge.py'],
              pathex=['C:\\Users\\IEUser\\Desktop\sigbridge'],
              binaries=[],
              datas=[

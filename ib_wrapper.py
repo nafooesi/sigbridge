@@ -1,44 +1,29 @@
 # -*- coding: utf-8 -*-
+import re
 from time import sleep
+import yaml
+from threading import Event
+
 from ib.ext.Contract import Contract
 from ib.ext.Order import Order
 from ib.opt import ibConnection
-from logging.handlers import TimedRotatingFileHandler
+from sig_logger import SigLogger
 
-import logging
-import os
-import re
-import yaml
 
 TS2IB_ORDER_TYPE_MAP = {'market': 'mkt'}
 
 
 class IBWrapper:
-    nextOrderId = 0
-    account_id = None
-    reconnected = False
-
-    # --- creating log file handler --- #
-    if not os.path.isdir('logs'):
-        os.makedirs('logs')
-    logger = logging.getLogger("IBWrapper")
-    logger.setLevel(logging.INFO)
-
-    # create file, formatter and add it to the handlers
-    fh = TimedRotatingFileHandler('logs/IBWrapper.log', when='d',
-                                  interval=1, backupCount=10)
-    fh.setLevel(logging.INFO)
-    formatter = logging.Formatter('%(asctime)s - %(process)d - %(name)s (%(lineno)d)'
-                                  '(%(levelname)s) : %(message)s')
-    fh.setFormatter(formatter)
-    logger.addHandler(fh)
-    # --- Done creating log file handler --- #
-
     def __init__(self, ib_host, uilogger=None):
+        self.nextOrderId = 0
+        self.account_id = None
+        self.reconnected = False
+        self.stop_event = Event()
+        self.logger = SigLogger("IBWrapper", uilogger=uilogger)
+
         self.con_str = ''.join([ib_host['server'], ":", str(ib_host['port'])])
         self.con = ibConnection(ib_host['server'], ib_host['port'], ib_host['client_id'])
         self.sig_multiplier = ib_host['sig_multiplier'] or 0.01
-        self.uilogger = uilogger
         self.skip_list = ib_host.get('skip_list', list())
 
         # Assign corresponding handling function to message types
@@ -58,13 +43,12 @@ class IBWrapper:
 
     def connect(self):
         cnt = 0
-        while True:
+        while not (self.stop_event and self.stop_event.is_set()):
             if self.con.connect():
-                if self.account_id:
-                    self.log_all('Connected to IB account: ' + self.account_id)
-                # self.logger.info('connected to IB on ' + self.con_str)
                 # give it a second to get data
                 sleep(1)
+                if self.account_id:
+                    self.log_all("Connected to IB: " + self.account_id)
                 return True
             else:
                 # keep max retry count
@@ -75,7 +59,7 @@ class IBWrapper:
                 acct = self.account_id if self.account_id else self.con_str
                 self.log_all('Not connected to IB account %s, will retry in %d sec...' % 
                              (acct, sleep_time),
-                             'error')
+                             level="error")
                 sleep(sleep_time)
 
     def my_account_handler(self, msg):
@@ -108,11 +92,11 @@ class IBWrapper:
         if regex:
             err_code = regex.group(1)
             err_msg = regex.group(2)
-            self.logger.error("IB Error [code: %s, message: %s]" % (err_code, err_msg))
+            self.logger.info("IB MSG [code: %s, message: %s]" % (err_code, err_msg))
             if err_code == 'None' and err_msg.startswith('unpack requires a string'):
-                self.log_all("IB account " + str(self.account_id) + " was shutdown!", 'error')
+                self.log_all("IB account " + self.account_id + " was shutdown!", level="error")
             if err_code == '504' and err_msg.startswith('Not connected'):
-                self.log_all("IB account not connected.  Will try connecting.", 'error')
+                self.log_all("IB account not connected.  Will try connecting.", level="error")
                 self.connect()
                 self.reconnected = True  # turn on flag to resubmit order
         else:
@@ -169,21 +153,15 @@ class IBWrapper:
         return self.con.placeOrder(order_id, contract, order)
 
     def disconnect(self):
-        self.log_all('Disconnecting IB account %s @ %s' % (self.account_id, self.con_str))
+        self.log_all("Disconnecting IB: %s @ %s" % (self.account_id, self.con_str))
         self.con.disconnect()
+        self.stop_event.set()
 
     def reqQuote(self, contract):
         self.con.reqMktData(1, contract, '', False)
 
     def log_all(self, message, level='info'):
-        if level == 'info':
-            self.logger.info(message)
-            if self.uilogger:
-                self.uilogger.info(message)
-        else:
-            self.logger.error(message)
-            if self.uilogger:
-                self.uilogger.error(message)
+        self.logger.log_all(message, level=level)
 
     def process_order(self, ts_signal):
         # check if this cient has skip list and whether the signal
@@ -213,7 +191,7 @@ class IBWrapper:
                         )
             self.reconnected = False
 
-        self.log_all(' '.join(["sent", self.account_id, ts_signal.action,
+        self.log_all(' '.join(["sent IB:", self.account_id, ts_signal.action,
                                str(quantity), ts_signal.symbol,
                                '@', ts_signal.order_type]))
         self.nextOrderId += 1

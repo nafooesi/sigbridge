@@ -46,8 +46,8 @@ def send(quantity=100):
             '        Account: SIM524807M\n'
             '        Order#: 4-4060-7888')
     """
-    body = ('TradeStation - Order has been filled for AAPL\n'
-             '   Order: Buy %s AAPL @ Market\n'
+    body = ('TradeStation - Order has been filled for SPY\n'
+             '   Order: Buy %s SPY @ Market\n'
              '   Qty Filled: %s \n'
              '   Filled Price: 65.2000\n'
              '   Duration: Day\n'
@@ -57,7 +57,7 @@ def send(quantity=100):
 
     msg = MIMEText(body % (str(quantity), str(quantity)))
     # msg['Subject'] = 'TradeStation - New order has been placed for VXX'
-    msg['Subject'] = 'TradeStation - Order has been filled for VXX'
+    msg['Subject'] = 'TradeStation - Order has been filled for SPY'
     msg['From'] = 'samhalim@roadrunner.com'
     msg['To'] = ','.join([toaddr])
 
@@ -71,7 +71,7 @@ def send(quantity=100):
 
 
 if __name__ == '__main__':
-    quantity = 200
+    quantity = 25
     for i in range(1):
         print("sending %d" % i)
         send(quantity + i)
