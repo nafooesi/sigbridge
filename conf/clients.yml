@@ -9,6 +9,8 @@
   client_id: 1
   sig_multiplier: 1
   active: True
+  security_types:
+    fut: 1
 
 - server: 'localhost'
   port: 7498

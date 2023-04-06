@@ -9,7 +9,7 @@ server = 'localhost'
 port = 25
 smtp_server = None
 
-def send(quantity=100):
+def send(quantity=2):
     global server
     global port
     global smtp_server

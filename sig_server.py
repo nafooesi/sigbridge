@@ -27,6 +27,8 @@ class SigServer(SMTPServer):
         self.ems = None             # email sender object
         self.slack = None           # slack client
         self.sig_shutdown = False   # signal to shut down
+        self.ts_signal_conf = None  # configuration for TS signal parsing
+
         self._init_app()
         self._init_client()
 
@@ -64,6 +66,7 @@ class SigServer(SMTPServer):
                                username=conf['slack']['username'],
                                icon=conf['slack']['icon']
                              )
+        self.ts_signal_conf = conf.get('ts_signal', {})
 
     def _init_client(self):
         """
@@ -115,7 +118,7 @@ class SigServer(SMTPServer):
         if not data:
             return
 
-        ts_signal = TradeStationSignal(data)
+        ts_signal = TradeStationSignal(data, self.ts_signal_conf)
         if not ts_signal.verify_attributes():
             return
 
@@ -229,5 +232,4 @@ class SigServer(SMTPServer):
         proc = FixProcessor(cfg_path, uilogger=self.uilogger)
         self.fix_clients[cfg_path] = proc
         proc.start()
-
 

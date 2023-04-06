@@ -13,3 +13,5 @@ slack:
     channel: '#test_bed'
     username: 'sb-bot'
     icon: ':satellite:'
+ts_signal:
+    future_regex: '[A-Z]{2,3}(F|G|H|J|K|M|N|Q|U|V|X|Z)\d{2}'
