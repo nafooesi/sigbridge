@@ -1,50 +1,41 @@
+import os
 import yaml
 import asyncore
-import os
-import logging
-import threading
+from threading import Thread
 
 from smtpd import SMTPServer
-from logging.handlers import TimedRotatingFileHandler
 from time import sleep, time
 
-from ibWrapper import IBWrapper
-from slack import Slack
-from emailSender import EmailSender
-from tradeStationSignal import TradeStationSignal
+from ib_wrapper import IBWrapper
+from slack_web_hook import SlackWebHook
+from email_sender import EmailSender
+from trade_station_signal import TradeStationSignal
+from fix_processor import FixProcessor
+from sig_logger import SigLogger
 
 
 class SigServer(SMTPServer):
 
-    # --- creating log file handler --- #
-    # TODO: make a logging module
-    if not os.path.isdir('logs'):
-        os.makedirs('logs')
-    logger = logging.getLogger("SigServer")
-    logger.setLevel(logging.INFO)
-
-    # create file, formatter and add it to the handlers
-    fh = TimedRotatingFileHandler('logs/SigServer.log', when='d',
-                                  interval=1, backupCount=10)
-    fh.setLevel(logging.INFO)
-    formatter = logging.Formatter('%(asctime)s - %(process)d - %(name)s '
-                                  '(%(lineno)d) %(levelname)s: %(message)s')
-    fh.setFormatter(formatter)
-    logger.addHandler(fh)
-    # --- Done creating log file handler --- #
-
     def __init__(self, laddr, raddr, uilogger):
         SMTPServer.__init__(self, laddr, raddr)
         self.uilogger = uilogger
+        self.logger = SigLogger("SigServer", uilogger=uilogger)
 
-        self.ib_clients = dict()    # a dict to reference different client by account id
+        self.ib_clients = []        # a dict to reference different client by account id
+        self.fix_clients = dict()   # a dict to reference fix clients
         self.em_clients = list()    # list of emails only clients
         self.ems = None             # email sender object
         self.slack = None           # slack client
         self.sig_shutdown = False   # signal to shut down
         self.ts_signal_conf = None  # configuration for TS signal parsing
 
-        # Retrieve application config from app.yml to initialize emailsender and slack
+        self._init_app()
+        self._init_client()
+
+    def _init_app(self):
+        """
+        Initialize application settings from app.yml.
+        """
         with open('conf/app.yml', 'r') as cf:
             conf = yaml.load(cf, Loader=yaml.FullLoader)
 
@@ -61,8 +52,14 @@ class SigServer(SMTPServer):
                                     send_opt=conf["email_sender"].get("send_opt", 1)
                                   )
 
+            # start email sender daemon
+            ems_thread = Thread(target=self.ems.daemon_sender,
+                                          args=(self.em_clients,))
+            ems_thread.daemon = True
+            ems_thread.start()
+
         if "slack" in conf:
-            self.slack = Slack(
+            self.slack = SlackWebHook(
                                conf['slack']['webhook_path'],
                                url=conf['slack']['webhook_url'],
                                channel=conf['slack']['channel'],
@@ -70,6 +67,41 @@ class SigServer(SMTPServer):
                                icon=conf['slack']['icon']
                              )
         self.ts_signal_conf = conf.get('ts_signal', {})
+
+    def _init_client(self):
+        """
+        Initialize client settings from clients.yml.
+        """
+        with open('conf/clients.yml', 'r') as cf:
+            conf = yaml.load(cf, Loader=yaml.FullLoader)
+
+        for client in conf:
+            # skip any client without active flag of value True
+            if not client.get('active'):
+                continue
+
+            # add email client to a list
+            if client.get('email'):
+                # email client
+                self.em_clients.append(client['email'])
+                continue
+
+            if client.get('fix_cfg_path'):
+                fix_thread = Thread(target=self.fix_thread,
+                                    kwargs=dict(client=client))
+                fix_thread.daemon = True
+                fix_thread.start()
+                continue
+
+            # remainings are IBs
+            # create a thread to connect each IB client so that it's non-blocking
+            ib_thread = Thread(target=self.ib_thread,
+                               kwargs=dict(ib_host=client))
+            ib_thread.daemon = True
+            ib_thread.start()
+
+    def log_all(self, msg, level="info"):
+        self.logger.log_all(msg, level=level)
 
     def process_message(self, peer, mailfrom, rcpttos, data):
         """
@@ -81,10 +113,8 @@ class SigServer(SMTPServer):
         :param data:
         :return:
         """
-        # TODO: restrict sender ip via peer?
         self.logger.info(' '.join(["Receiving signal from:",
                                    str(peer), ' with\n', data]))
-
         if not data:
             return
 
@@ -108,10 +138,17 @@ class SigServer(SMTPServer):
         try:
             # sending order to each IB client
             # make this threaded perhaps?
-            for ib_cli in self.ib_clients.itervalues():
+            for ib_cli in self.ib_clients:
                 ib_cli.process_order(ts_signal)
         except Exception as e:
             self.log_all('<IB Client> ' + str(e), level="error")
+
+        try:
+            # send order to fix client
+            for (key, fix_cli) in self.fix_clients.items():
+                fix_cli.process_order(ts_signal)
+        except Exception as e:
+            self.log_all('<Fix client>' + str(e), level="error")
 
         # send data to slack channel
         if self.slack:
@@ -144,34 +181,8 @@ class SigServer(SMTPServer):
 
     def run(self):
         """
-        This function will read the IB client config file and attempt to connect
-        to specified TWS in its own thread.
-        :return:
+        Start up the server.
         """
-        with open('conf/clients.yml', 'r') as cf:
-            conf = yaml.load(cf, Loader=yaml.FullLoader)
-
-        for client in conf:
-            # add email client to a list
-            if 'email' in client:
-                # email client
-                if 'active' in client and client['active']:
-                    self.em_clients.append(client['email'])
-                continue
-
-            # create a thread to connect each IB client so that it's non-blocking
-            ib_thread = threading.Thread(target=self.ib_thread,
-                                         kwargs=dict(ib_host=client))
-            ib_thread.daemon = True
-            ib_thread.start()
-
-        if self.ems:
-            # start email sender daemon
-            ems_thread = threading.Thread(target=self.ems.daemon_sender,
-                                          args=(self.em_clients,))
-            ems_thread.daemon = True
-            ems_thread.start()
-
         self.sig_shutdown = False
         try:
             asyncore.loop(timeout=0.8)
@@ -180,27 +191,18 @@ class SigServer(SMTPServer):
             self.logger.error(e)
 
     def shutdown(self):
+        """Shutdown the server."""
         self.sig_shutdown = True
-        for ib_cli in self.ib_clients.itervalues():
-            if ib_cli:
-                ib_cli.disconnect()
+        for ib_cli in self.ib_clients:
+            ib_cli.disconnect()
 
-        self.em_clients = list()
+        for (k, fix_cli) in self.fix_clients.items():
+            fix_cli.stop()
+
+        del self.ib_clients[:]
+        self.fix_clients.clear() 
+        self.em_clients = []
         self.close()
-
-    def log_all(self, message, level="info"):
-        """
-        print to both log file and the ui logger
-        :param message:
-        :param level: log level
-        :return:
-        """
-        if level == "info":
-            self.logger.info(message)
-            self.uilogger.info(message)
-        else:
-            self.logger.error(message)
-            self.uilogger.error(message)
 
     def ib_thread(self, ib_host=None):
         """
@@ -209,14 +211,22 @@ class SigServer(SMTPServer):
         :param ib_host:
         :return:
         """
-        if not (ib_host and ib_host.get('active')):
-            # skip inactive client
+        if not ib_host:
             return
 
         ib = IBWrapper(ib_host, self.uilogger)
-        connected = ib.connect()
-        if connected:
-            self.ib_clients[ib.account_id] = ib  # provides a reference to ib client for interaction
-            self.log_all('Connected to IB account: ' + ib.account_id)
-        else:
-            self.log_all(' '.join(['Failed to connect to', ib_host['server'], ':', str(ib_host['port'])]))
+        self.ib_clients.append(ib)  # provides a reference to ib client for interaction
+        ib.connect()
+
+    def fix_thread(self, client=None):
+        """
+        This function initialize connection to a FIX client.
+        """
+        if not client:
+            return
+
+        proc = FixProcessor(client, uilogger=self.uilogger)
+        cfg_path = client.get("fix_cfg_path")
+        self.fix_clients[cfg_path] = proc
+        proc.start()
+

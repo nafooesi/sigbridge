@@ -3,7 +3,7 @@ import urllib
 import json
 
 
-class Slack:
+class SlackWebHook:
     def __init__(self, webhook_path, url='hooks.slack.com', channel='#test_bed',
                     username="sb-bot", icon=":satellite:"):
         self.web_hook_url = url

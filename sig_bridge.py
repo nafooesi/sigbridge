@@ -5,11 +5,12 @@
 import threading
 import logging
 import Queue
+import traceback
 
 from Tkinter import Tk, Button, END, Frame
 from ScrolledText import ScrolledText
 
-from sigServer import SigServer
+from sig_server import SigServer
 
 
 class QueueLogger(logging.Handler):
@@ -33,7 +34,7 @@ class SigBridgeUI(Tk):
         self.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=1)
 
-        # 2 rows: firts with settings, second with registrar data
+        # 2 rows: first with settings, second with registrar data
         self.main_frame = Frame(self)
         # Commands row doesn't expands
         self.main_frame.rowconfigure(0, weight=0)
@@ -56,15 +57,15 @@ class SigBridgeUI(Tk):
         self.log_widget = ScrolledText(self.main_frame)
         self.log_widget.grid(row=1, column=0, columnspan=2)
         # made not editable
-        self.log_widget.config(state='disabled')
+        self.log_widget.config(state="disabled")
 
         # Queue where the logging handler will write
         self.log_queue = Queue.Queue()
 
         # Setup the logger
-        self.uilogger = logging.getLogger('SigBridgeUI')
+        self.uilogger = logging.getLogger("SigBridgeUI")
         self.uilogger.setLevel(logging.INFO)
-        formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+        formatter = logging.Formatter("%(asctime)s %(levelname)s %(message)s", "%Y-%m-%d %H:%M:%S")
 
         # Use the QueueLogger as Handler
         hl = QueueLogger(queue=self.log_queue)
@@ -86,7 +87,6 @@ class SigBridgeUI(Tk):
         self.log_widget.config(state='disabled')
 
     def start_log(self):
-        # self.uilogger.info("SigBridge Started.")
         self.update_widget()
         # self.control_log_button.configure(text="Pause Log", command=self.stop_log)
 
@@ -105,8 +105,8 @@ class SigBridgeUI(Tk):
 
     def set_geometry(self):
         # set position in window
-        w = 600  # width for the Tk
-        h = 300  # height for the Tk
+        w = 800  # width for the Tk
+        h = 500  # height for the Tk
 
         # get screen width and height
         ws = self.winfo_screenwidth()   # width of the screen
@@ -128,7 +128,8 @@ class SigBridgeUI(Tk):
             self.server_thread.start()
             self.server_button.configure(text="Disconnect", command=self.stop_server)
         except Exception as err:
-            self.uilogger.error("Cannot start the server: %s" % err.message)
+            self.uilogger.error("Cannot start the server: %s" % str(err))
+            traceback.print_exc()
 
         # self.label_variable.set(self.entry_variable.get()+"(Started Signal Server)")
         # self.entry.focus_set()
