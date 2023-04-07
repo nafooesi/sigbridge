@@ -146,7 +146,6 @@ class SigServer(SMTPServer):
         try:
             # send order to fix client
             for (key, fix_cli) in self.fix_clients.items():
-                print(" --- send order to fix client: " + key)
                 fix_cli.process_order(ts_signal)
         except Exception as e:
             self.log_all('<Fix client>' + str(e), level="error")
@@ -194,7 +193,6 @@ class SigServer(SMTPServer):
     def shutdown(self):
         """Shutdown the server."""
         self.sig_shutdown = True
-        print(" >>>>> shutdown <<<<<< ")
         for ib_cli in self.ib_clients:
             ib_cli.disconnect()
 
@@ -227,9 +225,8 @@ class SigServer(SMTPServer):
         if not client:
             return
 
+        proc = FixProcessor(client, uilogger=self.uilogger)
         cfg_path = client.get("fix_cfg_path")
-
-        proc = FixProcessor(cfg_path, uilogger=self.uilogger)
         self.fix_clients[cfg_path] = proc
         proc.start()
 

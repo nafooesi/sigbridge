@@ -24,7 +24,7 @@ class IBWrapper:
         self.con_str = ''.join([ib_host['server'], ":", str(ib_host['port'])])
         self.con = ibConnection(ib_host['server'], ib_host['port'], ib_host['client_id'])
         self.sig_multiplier = ib_host['sig_multiplier'] or 0.01
-        self.skip_list = ib_host.get('skip_list', list())
+        self.skip_list = ib_host.get('skip_list', [])
         self.security_types = ib_host.get('security_types')
 
         # Assign corresponding handling function to message types

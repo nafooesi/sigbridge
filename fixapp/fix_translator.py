@@ -16,7 +16,8 @@ class FixTranslator():
         if "|35=0|" in message:
             # skip heartbeat message
             return
-
+    
+        out = ''
         data = message.split('|')
         for kv in data:
             if not kv or '=' not in kv:
@@ -24,12 +25,13 @@ class FixTranslator():
             (k,v) = kv.split('=')
             m = self.fix_dict.get(str(k))
             if not m:
-                print("key " + str(k) + " is not found in dict!")
+                out += "key " + str(k) + " is not found in dict!" + "\n"
                 continue
             if "Val" in m:
-                print(str(k) + "-" + str(m.get("Name")) + ': ' + m.get("Val").get(str(v)))
+                out += str(k) + "-" + str(m.get("Name")) + ': ' + m.get("Val").get(str(v)) + "\n"
             else:
-                print(str(k) + "-" + str(m.get("Name")) + ': ' + str(v))
+                out += str(k) + "-" + str(m.get("Name")) + ': ' + str(v) + "\n"
+        return out
 
 
 if __name__=='__main__':

@@ -25,6 +25,8 @@ class SigLogger():
         self.uilogger = uilogger
 
     def log_all(self, message, level='info'):
+        if not message:
+            return
         if level == 'info':
             self.logger.info(message)
             if self.uilogger:
@@ -35,7 +37,9 @@ class SigLogger():
                 self.uilogger.error(message)
 
     def info(self, msg):
-        self.logger.info(msg)
+        if msg:
+            self.logger.info(msg)
 
     def error(self, msg):
-        self.logger.error(msg)
+        if msg:
+            self.logger.error(msg)
