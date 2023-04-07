@@ -19,9 +19,10 @@ def echo(f):
 
 class FixWrapper(fix.Application):
 
-    def __init__(self, session_settings):
+    def __init__(self, session_settings, logger):
         super(FixWrapper, self).__init__()
         self.session_settings = session_settings
+        self.logger = logger
 
         self.orderID = 0
         self.execID  = 0
@@ -53,17 +54,17 @@ class FixWrapper(fix.Application):
         '''
         self.sessionID = sessionID
         self.settingsDic = self.session_settings.get(sessionID)
-        print("created session id: " + sessionID.toString())
+        self.logger.info("created session id: " + sessionID.toString())
         return
 
     def onLogon(self, sessionID):
-        print("Logon to session " + sessionID.toString())
+        self.logger.info("Logon to session " + sessionID.toString())
         self.is_logged_in = True
         return
 
 
     def onLogout(self, sessionID):
-        print("Logout from session " + sessionID.toString())
+        self.logger.info("Logout from session " + sessionID.toString())
         self.is_logged_in = False
         return
 
@@ -76,26 +77,26 @@ class FixWrapper(fix.Application):
             #username = sessionID.getSenderCompID().getValue()
             message.setField(fix.Username(username))
             # message.setField(fix.Password(password))
-        self.fix_tran.translate(self.unicode_fix(message.toString()))
+        self.logger.info(self.fix_tran.translate(self.unicode_fix(message.toString())))
         return
 
     @echo
     def fromAdmin(self, message, sessionID):
         fix_str = self.unicode_fix(message.toString())
-        self.fix_tran.translate(fix_str)
+        self.logger.info(self.fix_tran.translate(fix_str))
         return
 
     @echo
     def toApp(self, message, sessionID):
         fix_str = self.unicode_fix(message.toString())
-        self.fix_tran.translate(fix_str)
+        self.logger.info(self.fix_tran.translate(fix_str))
         return
 
     @echo
     def fromApp(self, message, sessionID):
         '''Capture Messages coming from the counterparty'''
         fix_str = self.unicode_fix(message.toString())
-        self.fix_tran.translate(fix_str)
+        self.logger.info(self.fix_tran.translate(fix_str))
         return
 
     @echo
@@ -180,7 +181,7 @@ class FixWrapper(fix.Application):
         self.ORDERS_DICT[order_id] = order_object  
         # remember the latest order for easier accessing
         self.LASTEST_ORDER = order_object  
-        print("\n=====> Order recorded in memory with id = {}\n".format(order_id))
+        self.logger.info("\n=====> Order recorded in memory with id = {}\n".format(order_id))
 
     
     @echo
@@ -246,14 +247,14 @@ class FixWrapper(fix.Application):
     def buy(self,**kargs):
         kargs['54'] = fix.Side_BUY
         msg = self._NewOrderSingle(kargs)
-        self._record_json_order(msg)
+        # self._record_json_order(msg)
         fix.Session.sendToTarget(msg, self.sessionID)
     
     @echo
     def sell(self,**kargs):
         kargs['54'] = fix.Side_SELL
         msg = self._NewOrderSingle(kargs)
-        self._record_json_order(msg)
+        # self._record_json_order(msg)
         fix.Session.sendToTarget(msg, self.sessionID)
 
     @echo
@@ -261,8 +262,7 @@ class FixWrapper(fix.Application):
         kargs['40'] = fix.OrdType_LIMIT
         kargs['54'] = fix.Side_BUY
         msg = self._NewOrderSingle(kargs)
-
-        self._record_json_order(msg)
+        # self._record_json_order(msg)
         fix.Sessions.sendToTarget(msg, self.sessionID)
 
     @echo
@@ -270,8 +270,7 @@ class FixWrapper(fix.Application):
         kargs['40'] = fix.OrdType_LIMIT
         kargs['54'] = fix.Side_SELL
         msg = self._NewOrderSingle(kargs)
-
-        self._record_json_order(msg)
+        # self._record_json_order(msg)
         fix.Sessions.sendToTarget(msg, self.sessionID)
 
     @echo
