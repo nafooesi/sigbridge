@@ -26,6 +26,7 @@ class IBWrapper:
         self.sig_multiplier = ib_host['sig_multiplier'] or 0.01
         self.skip_list = ib_host.get('skip_list', [])
         self.security_types = ib_host.get('security_types')
+        self.fut_exch = ib_host.get('fut_exch', 'CME')
 
         # Assign corresponding handling function to message types
         self.con.register(self.my_account_handler, 'UpdateAccountValue')
@@ -131,8 +132,8 @@ class IBWrapper:
         contract = Contract()
         if sec_type == 'FUT':
             contract.m_localSymbol = symbol
-            contract.m_exchange = 'GLOBEX' 
-            contract.m_primExch = 'GLOBEX' 
+            contract.m_exchange = self.fut_exch
+            contract.m_primExch = self.fut_exch
         else:
             contract.m_symbol = symbol
             contract.m_exchange = exch
@@ -175,7 +176,7 @@ class IBWrapper:
         if len(self.skip_list) and ts_signal.symbol in self.skip_list:
             return
 
-        # check is security types restriction is defined.  
+        # check if security types restriction is defined.  
         # If it's not defined, no trading restriction on security.
         # If it's defined, skipped any types that are not in the list.
         if self.security_types and not self.security_types.get(ts_signal.sec_type.lower()):
